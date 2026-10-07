@@ -4,5 +4,8 @@ compatibility_date = "2026-08-15"
 
 # Secrets (set with `npx wrangler secret put <NAME>`, never commit):
 #   OPENROUTER_API_KEY, APP_TOKEN
-# Optional plain variable MODEL overrides DEFAULT_MODEL in src/index.js
-# (set it in the Cloudflare dashboard so deploys don't reset it).
+
+# MODEL overrides DEFAULT_MODEL in src/index.js. Remove this block to fall back
+# to the default (qwen/qwen3.5-plus-20260420).
+[vars]
+MODEL = "openai/gpt-4o-mini"
