@@ -15,3 +15,8 @@ export function extractMapId(input) {
 export function myMapsViewUrl(mid) {
   return `https://www.google.com/maps/d/viewer?mid=${encodeURIComponent(mid)}`
 }
+
+// The only My Maps page Google allows inside another site (read-only, link-shared maps).
+export function myMapsEmbedUrl(mid) {
+  return `https://www.google.com/maps/d/embed?mid=${encodeURIComponent(mid)}`
+}

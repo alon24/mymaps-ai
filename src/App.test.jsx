@@ -77,7 +77,16 @@ describe('loading a map', () => {
     await user.click(screen.getByRole('button', { name: 'טעינה' }))
 
     expect(await screen.findByText('טיול בירושלים')).toBeInTheDocument()
+    // Default view is the real Google My Maps embed
+    expect(screen.getByTitle('Google My Maps')).toHaveAttribute(
+      'src',
+      `https://www.google.com/maps/d/embed?mid=${MID}`,
+    )
+    await user.click(screen.getByRole('tab', { name: 'תצוגה עם שכבת AI' }))
     expect(screen.getByTestId('map')).toHaveTextContent('4/0')
+    expect(screen.queryByTitle('Google My Maps')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('tab', { name: 'My Maps (Google)' }))
+    expect(screen.getByTitle('Google My Maps')).toBeInTheDocument()
     const [url, init] = fetch.mock.calls[0]
     expect(url).toBe(`https://w.example.dev/kml?mid=${MID}`)
     expect(init.headers['X-App-Token']).toBe('secret-token')
@@ -131,6 +140,26 @@ describe('AI assistant', () => {
     const body = JSON.parse(init.body)
     expect(body.messages).toEqual([{ role: 'user', content: 'צור שכבת בתי קפה' }])
     expect(body.system).toContain('kml')
+  })
+
+  it('switches from the Google embed to our map when a layer arrives', async () => {
+    configure()
+    mockFetch(async (url) =>
+      String(url).includes('/kml')
+        ? new Response(fixture('hebrew-map.kml'))
+        : jsonResponse({ choices: [{ message: { content: `ok\n\`\`\`kml\n${aiKml}\n\`\`\`` } }] }),
+    )
+    const user = userEvent.setup()
+    render(<App />)
+    await user.type(screen.getByLabelText('קישור למפה'), MID)
+    await user.click(screen.getByRole('button', { name: 'טעינה' }))
+    expect(await screen.findByTitle('Google My Maps')).toBeInTheDocument()
+
+    await user.type(screen.getByLabelText('הודעה ל-AI'), 'שכבה')
+    await user.click(screen.getByRole('button', { name: 'שליחה' }))
+
+    expect(await screen.findByTestId('map')).toHaveTextContent('4/2')
+    expect(screen.queryByTitle('Google My Maps')).not.toBeInTheDocument()
   })
 
   it('does not display an invalid AI layer', async () => {

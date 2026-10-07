@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { extractMapId } from './mapId.js'
+import { extractMapId, myMapsEmbedUrl } from './mapId.js'
 
 describe('extractMapId', () => {
   const mid = '1AbC_def-GhIjKlMnOp'
@@ -16,4 +16,11 @@ describe('extractMapId', () => {
     'rejects %s',
     (input) => expect(extractMapId(input)).toBeNull(),
   )
+})
+
+describe('myMapsEmbedUrl', () => {
+  it('builds the embed URL with an encoded mid', () => {
+    expect(myMapsEmbedUrl('abc_DEF-123456')).toBe('https://www.google.com/maps/d/embed?mid=abc_DEF-123456')
+    expect(myMapsEmbedUrl('a&b')).toBe('https://www.google.com/maps/d/embed?mid=a%26b')
+  })
 })

@@ -3,7 +3,7 @@ import Settings from './components/Settings.jsx'
 import MapView from './components/MapView.jsx'
 import AiPanel from './components/AiPanel.jsx'
 import { loadSettings, saveSettings, isConfigured } from './lib/settings.js'
-import { extractMapId, myMapsViewUrl } from './lib/mapId.js'
+import { extractMapId, myMapsViewUrl, myMapsEmbedUrl } from './lib/mapId.js'
 import { fetchKml } from './lib/api.js'
 import { parseKml } from './lib/kml.js'
 
@@ -13,6 +13,7 @@ export default function App() {
   const [link, setLink] = useState('')
   const [map, setMap] = useState(null)
   const [aiGeojson, setAiGeojson] = useState(null)
+  const [view, setView] = useState('google') // 'google' | 'interactive'
   const [status, setStatus] = useState('')
   const [error, setError] = useState('')
 
@@ -34,6 +35,7 @@ export default function App() {
       const parsed = parseKml(await fetchKml(settings, mid))
       setMap({ mid, ...parsed })
       setAiGeojson(null)
+      setView('google')
     } catch (err) {
       setError(err.message)
     } finally {
@@ -76,8 +78,35 @@ export default function App() {
               <a href={myMapsViewUrl(map.mid)} target="_blank" rel="noreferrer">פתח ב-My Maps</a>
             </p>
           )}
-          <MapView geojson={map?.geojson} aiGeojson={aiGeojson} />
-          <AiPanel settings={settings} map={map} onLayer={setAiGeojson} />
+          {map && (
+            <div className="tabs" role="tablist" aria-label="תצוגת מפה">
+              <button type="button" role="tab" aria-selected={view === 'google'} onClick={() => setView('google')}>
+                My Maps (Google)
+              </button>
+              <button type="button" role="tab" aria-selected={view === 'interactive'} onClick={() => setView('interactive')}>
+                תצוגה עם שכבת AI
+              </button>
+            </div>
+          )}
+          {map && view === 'google' ? (
+            <iframe
+              className="map"
+              title="Google My Maps"
+              src={myMapsEmbedUrl(map.mid)}
+              loading="lazy"
+              referrerPolicy="no-referrer"
+            />
+          ) : (
+            <MapView geojson={map?.geojson} aiGeojson={aiGeojson} />
+          )}
+          <AiPanel
+            settings={settings}
+            map={map}
+            onLayer={(g) => {
+              setAiGeojson(g)
+              setView('interactive') // AI layers can only be drawn on our own map
+            }}
+          />
         </main>
       )}
     </div>

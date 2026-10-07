@@ -30,3 +30,7 @@ button.secondary { background: #e8eaed; color: #202124; }
 .chat .pending { opacity: .6; }
 .layer { border: 1px dashed #e8710a; border-radius: 8px; padding: 8px; margin-bottom: 8px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .layer .hint { flex-basis: 100%; margin: 0; }
+.tabs { display: flex; gap: 6px; }
+.tabs button { background: #e8eaed; color: #202124; }
+.tabs button[aria-selected='true'] { background: #1a73e8; color: #fff; }
+iframe.map { width: 100%; border: 0; }
