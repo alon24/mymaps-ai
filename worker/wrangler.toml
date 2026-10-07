@@ -1,0 +1,8 @@
+name = "mymaps-ai-worker"
+main = "src/index.js"
+compatibility_date = "2026-08-15"
+
+# Secrets (set with `npx wrangler secret put <NAME>`, never commit):
+#   OPENROUTER_API_KEY, APP_TOKEN
+# Optional plain variable MODEL overrides DEFAULT_MODEL in src/index.js
+# (set it in the Cloudflare dashboard so deploys don't reset it).

@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+  <Document>
+    <name>טיול בירושלים</name>
+    <Folder>
+      <name>אתרים</name>
+      <Placemark>
+        <name>הכותל המערבי</name>
+        <description>מקום קדוש</description>
+        <Point><coordinates>35.2342,31.7767,0</coordinates></Point>
+      </Placemark>
+      <Placemark>
+        <name>מגדל דוד</name>
+        <Point><coordinates>35.2276,31.7762,0</coordinates></Point>
+      </Placemark>
+    </Folder>
+    <Folder>
+      <name>מסלולים</name>
+      <Placemark>
+        <name>הליכה בעיר העתיקה</name>
+        <LineString><coordinates>35.2276,31.7762,0 35.2300,31.7765,0 35.2342,31.7767,0</coordinates></LineString>
+      </Placemark>
+      <Placemark>
+        <name>הרובע היהודי</name>
+        <Polygon><outerBoundaryIs><LinearRing><coordinates>35.229,31.775,0 35.234,31.775,0 35.234,31.777,0 35.229,31.777,0 35.229,31.775,0</coordinates></LinearRing></outerBoundaryIs></Polygon>
+      </Placemark>
+    </Folder>
+  </Document>
+</kml>

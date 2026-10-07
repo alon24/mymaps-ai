@@ -1,0 +1,32 @@
+:root {
+  font-family: system-ui, -apple-system, 'Segoe UI', Arial, sans-serif;
+  color: #202124;
+  background: #f1f3f4;
+}
+* { box-sizing: border-box; }
+body { margin: 0; }
+.app { max-width: 960px; margin: 0 auto; padding: 12px; }
+header { display: flex; align-items: center; justify-content: space-between; }
+h1 { font-size: 1.4rem; margin: 8px 0; }
+h2 { font-size: 1.1rem; margin: 0 0 8px; }
+main { display: flex; flex-direction: column; gap: 12px; }
+.card { background: #fff; border-radius: 10px; padding: 12px; box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+.row { display: flex; gap: 8px; }
+.row input { flex: 1; min-width: 0; }
+input { font: inherit; padding: 10px; border: 1px solid #dadce0; border-radius: 6px; width: 100%; }
+label { display: block; margin-bottom: 10px; font-weight: 500; }
+label input { margin-top: 4px; font-weight: normal; }
+button { font: inherit; padding: 10px 16px; border: 0; border-radius: 6px; background: #1a73e8; color: #fff; cursor: pointer; white-space: nowrap; }
+button:disabled { opacity: .5; cursor: default; }
+button.secondary { background: #e8eaed; color: #202124; }
+.error { color: #c5221f; }
+.hint { color: #5f6368; font-size: .9rem; }
+.map { height: 50vh; min-height: 300px; border-radius: 10px; }
+.map-info { margin: 0; }
+.chat { list-style: none; padding: 0; margin: 0 0 8px; display: flex; flex-direction: column; gap: 6px; max-height: 40vh; overflow-y: auto; }
+.chat li { padding: 8px 10px; border-radius: 8px; white-space: pre-wrap; }
+.chat .user { background: #e8f0fe; align-self: flex-start; }
+.chat .assistant { background: #f1f3f4; align-self: flex-end; }
+.chat .pending { opacity: .6; }
+.layer { border: 1px dashed #e8710a; border-radius: 8px; padding: 8px; margin-bottom: 8px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.layer .hint { flex-basis: 100%; margin: 0; }

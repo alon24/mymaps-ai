@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+  <Document>
+    <name>מפה ריקה</name>
+    <Folder><name>שכבה ללא פריטים</name></Folder>
+    <Folder>
+      <name>פריט ללא גיאומטריה</name>
+      <Placemark><name>אין קואורדינטות</name></Placemark>
+    </Folder>
+  </Document>
+</kml>
