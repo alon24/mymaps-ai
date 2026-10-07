@@ -19,13 +19,36 @@ export default function AiPanel({ settings, map, onLayer }) {
   const [error, setError] = useState('')
   const [layer, setLayer] = useState(null)
 
-  async function send(e) {
+  function send(e) {
     e.preventDefault()
     const text = input.trim()
     if (!text || busy) return
+    setInput('')
+    submit(text)
+  }
+
+  // Asks the browser for the current position (only on click), then asks the AI.
+  function nearMe() {
+    if (busy) return
+    setError('')
+    if (!navigator.geolocation) {
+      setError('הדפדפן לא תומך במיקום.')
+      return
+    }
+    navigator.geolocation.getCurrentPosition(
+      ({ coords }) =>
+        submit(
+          `אני נמצא ב-${coords.latitude.toFixed(5)},${coords.longitude.toFixed(5)}. ` +
+            'הצע 5 מקומות מעניינים קרובים אליי (עם קואורדינטות מדויקות) ושכבת KML שלהם.',
+        ),
+      () => setError('לא ניתן לקבל מיקום. אשר גישה למיקום בדפדפן ונסה שוב.'),
+      { enableHighAccuracy: true, timeout: 15000 },
+    )
+  }
+
+  async function submit(text) {
     const next = [...messages, { role: 'user', content: text }]
     setMessages(next)
-    setInput('')
     setError('')
     setBusy(true)
     try {
@@ -75,6 +98,9 @@ export default function AiPanel({ settings, map, onLayer }) {
         />
         <button type="submit" disabled={busy || !input.trim()}>שליחה</button>
       </form>
+      <button type="button" className="secondary near" onClick={nearMe} disabled={busy}>
+        📍 מה יש לידי?
+      </button>
     </section>
   )
 }

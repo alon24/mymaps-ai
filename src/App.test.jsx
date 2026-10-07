@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import App from './App.jsx'
@@ -154,6 +154,71 @@ describe('recent maps', () => {
   })
 })
 
+describe('offline copy', () => {
+  async function loadOnce(user) {
+    await user.type(screen.getByLabelText('קישור למפה'), MID)
+    await user.click(screen.getByRole('button', { name: 'טעינה' }))
+    await screen.findByText('טיול בירושלים', { selector: 'strong' })
+  }
+
+  it('opens a recent map from its saved copy when the network is down', async () => {
+    configure()
+    mockFetch(async () => new Response(fixture('hebrew-map.kml')))
+    const user = userEvent.setup()
+    const { unmount } = render(<App />)
+    await loadOnce(user)
+    unmount()
+
+    mockFetch(async () => {
+      throw new TypeError('Failed to fetch')
+    })
+    render(<App />)
+    await user.click(screen.getByRole('button', { name: 'טיול בירושלים' }))
+
+    expect(await screen.findByText(/מוצג עותק שמור/)).toBeInTheDocument()
+    expect(screen.getByTestId('map')).toHaveTextContent('4/0')
+    expect(screen.queryByTitle('Google My Maps')).not.toBeInTheDocument()
+  })
+
+  it('shows the error when offline and nothing was saved', async () => {
+    configure()
+    mockFetch(async () => {
+      throw new TypeError('Failed to fetch')
+    })
+    const user = userEvent.setup()
+    render(<App />)
+    await user.type(screen.getByLabelText('קישור למפה'), MID)
+    await user.click(screen.getByRole('button', { name: 'טעינה' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('לא ניתן להתחבר')
+  })
+
+  it('does not fall back to the copy on a wrong token', async () => {
+    configure()
+    mockFetch(async () => new Response(fixture('hebrew-map.kml')))
+    const user = userEvent.setup()
+    const { unmount } = render(<App />)
+    await loadOnce(user)
+    unmount()
+
+    mockFetch(async () => jsonResponse({ error: 'unauthorized' }, 401))
+    render(<App />)
+    await user.click(screen.getByRole('button', { name: 'טיול בירושלים' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('APP_TOKEN')
+    expect(screen.queryByText(/מוצג עותק שמור/)).not.toBeInTheDocument()
+  })
+
+  it('forgets the saved copy when the map is removed from recents', async () => {
+    configure()
+    mockFetch(async () => new Response(fixture('hebrew-map.kml')))
+    const user = userEvent.setup()
+    render(<App />)
+    await loadOnce(user)
+    expect(localStorage.getItem(`mymaps-ai.kml.${MID}`)).not.toBeNull()
+    await user.click(screen.getByRole('button', { name: 'הסר טיול בירושלים' }))
+    expect(localStorage.getItem(`mymaps-ai.kml.${MID}`)).toBeNull()
+  })
+})
+
 describe('AI assistant', () => {
   const aiKml = `<?xml version="1.0"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>קפה</name>
 <Placemark><name>קפה א</name><Point><coordinates>35.22,31.78</coordinates></Point></Placemark>
@@ -200,6 +265,47 @@ describe('AI assistant', () => {
 
     expect(await screen.findByTestId('map')).toHaveTextContent('4/2')
     expect(screen.queryByTitle('Google My Maps')).not.toBeInTheDocument()
+  })
+
+  describe('near me', () => {
+    const setGeo = (impl) =>
+      Object.defineProperty(navigator, 'geolocation', { value: impl, configurable: true })
+    afterEach(() => setGeo(undefined))
+
+    it('asks the AI about places near the current position', async () => {
+      configure()
+      setGeo({ getCurrentPosition: (ok) => ok({ coords: { latitude: 31.7683, longitude: 35.2137 } }) })
+      const fetch = mockFetch(async () =>
+        jsonResponse({ choices: [{ message: { content: 'הנה כמה מקומות.' } }] }),
+      )
+      const user = userEvent.setup()
+      render(<App />)
+      await user.click(screen.getByRole('button', { name: /מה יש לידי/ }))
+
+      expect(await screen.findByText('הנה כמה מקומות.')).toBeInTheDocument()
+      const sent = JSON.parse(fetch.mock.calls[0][1].body).messages[0].content
+      expect(sent).toContain('31.76830,35.21370')
+    })
+
+    it('explains when location is denied and does not call the AI', async () => {
+      configure()
+      setGeo({ getCurrentPosition: (_ok, fail) => fail({ code: 1 }) })
+      const fetch = mockFetch(async () => jsonResponse({}))
+      const user = userEvent.setup()
+      render(<App />)
+      await user.click(screen.getByRole('button', { name: /מה יש לידי/ }))
+      expect(await screen.findByRole('alert')).toHaveTextContent('מיקום')
+      expect(fetch).not.toHaveBeenCalled()
+    })
+
+    it('explains when the browser has no geolocation', async () => {
+      configure()
+      setGeo(undefined)
+      const user = userEvent.setup()
+      render(<App />)
+      await user.click(screen.getByRole('button', { name: /מה יש לידי/ }))
+      expect(await screen.findByRole('alert')).toHaveTextContent('לא תומך')
+    })
   })
 
   it('does not display an invalid AI layer', async () => {

@@ -4,7 +4,8 @@ import MapView from './components/MapView.jsx'
 import AiPanel from './components/AiPanel.jsx'
 import { loadSettings, saveSettings, isConfigured } from './lib/settings.js'
 import { extractMapId, myMapsViewUrl, myMapsEmbedUrl } from './lib/mapId.js'
-import { fetchKml } from './lib/api.js'
+import { fetchKml, ApiError } from './lib/api.js'
+import { getCachedKml, setCachedKml, pruneCache } from './lib/kmlCache.js'
 import { parseKml } from './lib/kml.js'
 import { loadRecent, addRecent, removeRecent } from './lib/recentMaps.js'
 
@@ -15,6 +16,7 @@ export default function App() {
   const [map, setMap] = useState(null)
   const [aiGeojson, setAiGeojson] = useState(null)
   const [recent, setRecent] = useState(loadRecent)
+  const [offline, setOffline] = useState(false)
   const [view, setView] = useState('google') // 'google' | 'interactive'
   const [status, setStatus] = useState('')
   const [error, setError] = useState('')
@@ -28,11 +30,26 @@ export default function App() {
     setError('')
     setStatus('טוען מפה…')
     try {
-      const parsed = parseKml(await fetchKml(settings, mid))
+      let text
+      let fromCache = false
+      try {
+        text = await fetchKml(settings, mid)
+      } catch (err) {
+        // Network down or Worker/Google failing: fall back to the saved copy.
+        const cached = err instanceof ApiError && (err.status === 0 || err.status >= 500) ? getCachedKml(mid) : null
+        if (cached === null) throw err
+        text = cached
+        fromCache = true
+      }
+      const parsed = parseKml(text)
+      if (!fromCache) setCachedKml(mid, text)
       setMap({ mid, ...parsed })
+      setOffline(fromCache)
       setAiGeojson(null)
-      setView('google')
-      setRecent(addRecent({ mid, name: parsed.name }))
+      setView(fromCache ? 'interactive' : 'google') // the Google embed needs internet
+      const next = addRecent({ mid, name: parsed.name })
+      pruneCache(next.map((m) => m.mid))
+      setRecent(next)
     } catch (err) {
       setError(err.message)
     } finally {
@@ -91,7 +108,11 @@ export default function App() {
                     type="button"
                     className="x"
                     aria-label={`הסר ${m.name}`}
-                    onClick={() => setRecent(removeRecent(m.mid))}
+                    onClick={() => {
+                      const next = removeRecent(m.mid)
+                      pruneCache(next.map((r) => r.mid))
+                      setRecent(next)
+                    }}
                   >×</button>
                 </li>
               ))}
@@ -99,6 +120,7 @@ export default function App() {
           )}
           {status && <p role="status">{status}</p>}
           {error && <p role="alert" className="error">{error}</p>}
+          {offline && <p role="status" className="hint">אין חיבור — מוצג עותק שמור של המפה.</p>}
           {map && (
             <p className="map-info">
               <strong>{map.name || 'מפה'}</strong> · {map.geojson.features.length} פריטים ·{' '}

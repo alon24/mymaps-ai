@@ -40,3 +40,4 @@ iframe.map { width: 100%; border: 0; }
 .recent li button.x { background: #d2e3fc; border-radius: 0 6px 6px 0; padding: 6px 8px; }
 a.button { font: inherit; padding: 10px 16px; border-radius: 6px; text-decoration: none; white-space: nowrap; display: inline-block; }
 a.button.secondary { background: #e8eaed; color: #202124; }
+.near { margin-top: 8px; width: 100%; }
