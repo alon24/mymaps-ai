@@ -6,6 +6,7 @@ import { loadSettings, saveSettings, isConfigured } from './lib/settings.js'
 import { extractMapId, myMapsViewUrl, myMapsEmbedUrl } from './lib/mapId.js'
 import { fetchKml } from './lib/api.js'
 import { parseKml } from './lib/kml.js'
+import { loadRecent, addRecent, removeRecent } from './lib/recentMaps.js'
 
 export default function App() {
   const [settings, setSettings] = useState(loadSettings)
@@ -13,6 +14,7 @@ export default function App() {
   const [link, setLink] = useState('')
   const [map, setMap] = useState(null)
   const [aiGeojson, setAiGeojson] = useState(null)
+  const [recent, setRecent] = useState(loadRecent)
   const [view, setView] = useState('google') // 'google' | 'interactive'
   const [status, setStatus] = useState('')
   const [error, setError] = useState('')
@@ -22,25 +24,30 @@ export default function App() {
     setShowSettings(false)
   }
 
-  async function loadMap(e) {
-    e.preventDefault()
+  async function loadMapById(mid) {
     setError('')
-    const mid = extractMapId(link)
-    if (!mid) {
-      setError('לא נמצא מזהה מפה. הדבק קישור ל-My Maps שמכיל mid=')
-      return
-    }
     setStatus('טוען מפה…')
     try {
       const parsed = parseKml(await fetchKml(settings, mid))
       setMap({ mid, ...parsed })
       setAiGeojson(null)
       setView('google')
+      setRecent(addRecent({ mid, name: parsed.name }))
     } catch (err) {
       setError(err.message)
     } finally {
       setStatus('')
     }
+  }
+
+  function loadMap(e) {
+    e.preventDefault()
+    const mid = extractMapId(link)
+    if (!mid) {
+      setError('לא נמצא מזהה מפה. הדבק קישור ל-My Maps שמכיל mid=')
+      return
+    }
+    return loadMapById(mid)
   }
 
   return (
@@ -70,6 +77,21 @@ export default function App() {
             />
             <button type="submit">טעינה</button>
           </form>
+          {recent.length > 0 && (
+            <ul className="recent" aria-label="מפות אחרונות">
+              {recent.map((m) => (
+                <li key={m.mid}>
+                  <button type="button" onClick={() => { setLink(m.mid); loadMapById(m.mid) }}>{m.name}</button>
+                  <button
+                    type="button"
+                    className="x"
+                    aria-label={`הסר ${m.name}`}
+                    onClick={() => setRecent(removeRecent(m.mid))}
+                  >×</button>
+                </li>
+              ))}
+            </ul>
+          )}
           {status && <p role="status">{status}</p>}
           {error && <p role="alert" className="error">{error}</p>}
           {map && (

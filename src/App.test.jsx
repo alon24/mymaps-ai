@@ -76,7 +76,7 @@ describe('loading a map', () => {
     await user.type(screen.getByLabelText('קישור למפה'), `https://www.google.com/maps/d/viewer?mid=${MID}`)
     await user.click(screen.getByRole('button', { name: 'טעינה' }))
 
-    expect(await screen.findByText('טיול בירושלים')).toBeInTheDocument()
+    expect(await screen.findByText('טיול בירושלים', { selector: 'strong' })).toBeInTheDocument()
     // Default view is the real Google My Maps embed
     expect(screen.getByTitle('Google My Maps')).toHaveAttribute(
       'src',
@@ -111,6 +111,35 @@ describe('loading a map', () => {
     await user.type(screen.getByLabelText('קישור למפה'), MID)
     await user.click(screen.getByRole('button', { name: 'טעינה' }))
     expect(await screen.findByRole('alert')).toHaveTextContent('APP_TOKEN')
+  })
+})
+
+describe('recent maps', () => {
+  it('remembers loaded maps, reloads with one click, and can forget them', async () => {
+    configure()
+    const fetch = mockFetch(async () => new Response(fixture('hebrew-map.kml')))
+    const user = userEvent.setup()
+    render(<App />)
+    expect(screen.queryByRole('list', { name: 'מפות אחרונות' })).not.toBeInTheDocument()
+
+    await user.type(screen.getByLabelText('קישור למפה'), MID)
+    await user.click(screen.getByRole('button', { name: 'טעינה' }))
+    const chip = await screen.findByRole('button', { name: 'טיול בירושלים' })
+    expect(JSON.parse(localStorage.getItem('mymaps-ai.recent'))).toEqual([{ mid: MID, name: 'טיול בירושלים' }])
+
+    await user.click(chip)
+    expect(fetch).toHaveBeenCalledTimes(2)
+    expect(fetch.mock.calls[1][0]).toBe(`https://w.example.dev/kml?mid=${MID}`)
+
+    await user.click(screen.getByRole('button', { name: 'הסר טיול בירושלים' }))
+    expect(screen.queryByRole('list', { name: 'מפות אחרונות' })).not.toBeInTheDocument()
+  })
+
+  it('shows previously saved maps on startup', () => {
+    configure()
+    localStorage.setItem('mymaps-ai.recent', JSON.stringify([{ mid: MID, name: 'Rome 2025' }]))
+    render(<App />)
+    expect(screen.getByRole('button', { name: 'Rome 2025' })).toBeInTheDocument()
   })
 })
 
