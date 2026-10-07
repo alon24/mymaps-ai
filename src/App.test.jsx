@@ -114,6 +114,17 @@ describe('loading a map', () => {
   })
 })
 
+describe('My Maps shortcut', () => {
+  it('links to the My Maps list in a new tab', () => {
+    configure()
+    render(<App />)
+    const link = screen.getByRole('link', { name: 'פתח My Maps' })
+    expect(link).toHaveAttribute('href', 'https://www.google.com/maps/d/')
+    expect(link).toHaveAttribute('target', '_blank')
+    expect(link).toHaveAttribute('rel', expect.stringContaining('noreferrer'))
+  })
+})
+
 describe('recent maps', () => {
   it('remembers loaded maps, reloads with one click, and can forget them', async () => {
     configure()

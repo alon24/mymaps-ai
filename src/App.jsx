@@ -55,7 +55,12 @@ export default function App() {
       <header>
         <h1>MyMaps AI</h1>
         {!showSettings && (
-          <button type="button" className="secondary" onClick={() => setShowSettings(true)}>הגדרות</button>
+          <div className="row">
+            <a className="button secondary" href="https://www.google.com/maps/d/" target="_blank" rel="noreferrer">
+              פתח My Maps
+            </a>
+            <button type="button" className="secondary" onClick={() => setShowSettings(true)}>הגדרות</button>
+          </div>
         )}
       </header>
 
