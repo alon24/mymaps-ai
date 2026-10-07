@@ -44,19 +44,18 @@ Google My Maps has no public API, so:
 - AI output is untrusted: validate any generated KML/JSON before using it, and test the validation.
 
 ## Commands
-Local Node on this machine is too old (v12), so run everything in a `node:22` container:
+Node 22 via nvm (`nvm use 22`); the system apt Node is v12 and too old.
 ```bash
-alias dnode='docker run --rm -it -u $(id -u):$(id -g) -e HOME=/tmp -v "$PWD":/app -w /app -p 5173:5173 node:22'
-
-dnode npm install
-dnode npm run dev -- --host   # local dev at http://localhost:5173/mymaps-ai/
-dnode npm test                # vitest (frontend)
-dnode npm run build
+npm install
+npm run dev          # local dev at http://localhost:5173/mymaps-ai/
+npm test             # vitest (frontend)
+npm run build
 
 cd worker
-dnode npm install             # .npmrc sets legacy-peer-deps (npm arborist bug with vitest-pool-workers)
-dnode npm test                # vitest in workerd
-dnode npx wrangler deploy     # needs wrangler login, see README
+npm install          # .npmrc sets legacy-peer-deps (npm arborist bug with vitest-pool-workers)
+npm test             # vitest in workerd
+npx wrangler dev     # local worker
+npx wrangler deploy
 ```
 Deploy of the frontend: push to `main` → GitHub Actions runs both test suites, builds and publishes to GitHub Pages (`.github/workflows/deploy.yml`). There is no `npm run deploy`.
 Playwright E2E is not set up yet.
