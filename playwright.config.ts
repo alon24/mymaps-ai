@@ -9,6 +9,8 @@ export default defineConfig({
   use: {
     baseURL: 'http://localhost:4173',
     locale: 'he-IL',
+    // The PWA service worker would hide requests from page.route mocks
+    serviceWorkers: 'block',
     // In some sandboxes Chromium is preinstalled at a fixed path
     ...(process.env.PW_CHROMIUM ? { launchOptions: { executablePath: process.env.PW_CHROMIUM } } : {}),
   },
