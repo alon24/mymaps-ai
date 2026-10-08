@@ -110,9 +110,9 @@ test('AI proposes changes, user applies them, undo reverts', async ({ page }) =>
   await page.getByRole('tab', { name: /AI/ }).click()
   await page.getByLabel('הודעה לעוזר').fill('תכנן יום')
   await page.getByRole('button', { name: 'שלח' }).click()
-  await expect
-    .poll(async () => (await page.locator('.ai').innerText()) + ` | requests=${requests} settings=${await page.evaluate(() => localStorage.getItem('mymaps-ai.settings'))}`, { timeout: 8000 })
-    .toContain('יצרתי יום אחד')
+  await page.locator('.msg--assistant:not(.msg--typing)').first().waitFor({ timeout: 8000 }).catch(() => undefined)
+  const state = `${await page.locator('.ai').innerText()} | requests=${requests}`
+  expect(state).toContain('יצרתי יום אחד')
   await expect(page.locator('.proposal li')).toHaveText([/שכבה חדשה "יום 1"/, /העברת 2 פריטים/])
   await page.getByRole('button', { name: /החל שינויים/ }).click()
   await expect(page.locator('.pin--num')).toHaveCount(2)
