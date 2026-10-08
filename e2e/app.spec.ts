@@ -88,14 +88,12 @@ test('AI tab explains setup when no Worker is configured', async ({ page }) => {
 })
 
 test('AI proposes changes, user applies them, undo reverts', async ({ page }) => {
-  await page.evaluate(() => localStorage.setItem('mymaps-ai.settings', JSON.stringify({ workerUrl: 'https://worker.test', appToken: 't' })))
+  await page.evaluate(() => localStorage.setItem('mymaps-ai.settings', JSON.stringify({ workerUrl: `${location.origin}/__worker`, appToken: 't' })))
   await page.reload()
   await addPoint(page, 'א', 0.45, 0.4)
   await addPoint(page, 'ב', 0.6, 0.45)
-  const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Content-Type, X-App-Token', 'Access-Control-Allow-Methods': 'POST, OPTIONS' }
-  await page.route('https://worker.test/ai', async (route) => {
-    // Newer Chromium routes the CORS preflight through Playwright too
-    if (route.request().method() === 'OPTIONS') return route.fulfill({ status: 204, headers: cors })
+  // Same-origin mock Worker (no CORS preflight involved)
+  await page.route('**/__worker/ai', async (route) => {
     const body = route.request().postDataJSON() as { system: string }
     const ids = [...body.system.matchAll(/"id":"([^"]+)","name":"(א|ב)"/g)].map((m) => m[1])
     const content = JSON.stringify({
@@ -105,12 +103,12 @@ test('AI proposes changes, user applies them, undo reverts', async ({ page }) =>
         { type: 'move_features', ids, layer_name: 'יום 1' },
       ],
     })
-    await route.fulfill({ headers: cors, json: { choices: [{ message: { role: 'assistant', content } }] } })
+    await route.fulfill({ json: { choices: [{ message: { role: 'assistant', content } }] } })
   })
   await page.getByRole('tab', { name: /AI/ }).click()
   await page.getByLabel('הודעה לעוזר').fill('תכנן יום')
   await page.getByRole('button', { name: 'שלח' }).click()
-  await expect(page.getByText('יצרתי יום אחד')).toBeVisible()
+  await expect(page.locator('.msg--assistant').last()).toContainText('יצרתי יום אחד')
   await expect(page.locator('.proposal li')).toHaveText([/שכבה חדשה "יום 1"/, /העברת 2 פריטים/])
   await page.getByRole('button', { name: /החל שינויים/ }).click()
   await expect(page.locator('.pin--num')).toHaveCount(2)
