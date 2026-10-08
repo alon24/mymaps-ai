@@ -35,7 +35,9 @@ function Title() {
   const readOnly = useMapStore((s) => s.readOnly)
   const [editing, setEditing] = useState(false)
   const [value, setValue] = useState(doc.title)
-  useEffect(() => setValue(doc.title), [doc.title])
+  useEffect(() => {
+    setValue(doc.title)
+  }, [doc.title])
   if (editing && !readOnly) {
     return (
       <input

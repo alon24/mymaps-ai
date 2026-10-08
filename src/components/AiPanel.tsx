@@ -29,10 +29,15 @@ export function AiPanel() {
   const endRef = useRef<HTMLDivElement>(null)
   const configured = isConfigured(loadSettings())
 
-  useEffect(() => endRef.current?.scrollIntoView({ block: 'end', behavior: 'smooth' }), [turns.length, busy])
+  // Braces matter: newer Chrome returns a Promise from scrollIntoView, and an effect must not return one
+  useEffect(() => {
+    endRef.current?.scrollIntoView({ block: 'end', behavior: 'smooth' })
+  }, [turns.length, busy])
 
   // Start a fresh conversation when another map is opened
-  useEffect(() => setTurns([]), [doc.id])
+  useEffect(() => {
+    setTurns([])
+  }, [doc.id])
 
   async function send(text: string) {
     const q = text.trim()
