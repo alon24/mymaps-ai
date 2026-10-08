@@ -1,0 +1,23 @@
+import { defineConfig, devices } from '@playwright/test'
+
+export default defineConfig({
+  testDir: './e2e',
+  timeout: 60_000,
+  retries: process.env.CI ? 1 : 0,
+  use: {
+    baseURL: 'http://localhost:4173',
+    locale: 'he-IL',
+    // In some sandboxes Chromium is preinstalled at a fixed path
+    ...(process.env.PW_CHROMIUM ? { launchOptions: { executablePath: process.env.PW_CHROMIUM } } : {}),
+  },
+  projects: [
+    { name: 'desktop', use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 800 } } },
+    { name: 'phone', use: { ...devices['Pixel 7'] } },
+  ],
+  webServer: {
+    command: 'npm run build && npx vite preview --port 4173 --strictPort',
+    port: 4173,
+    reuseExistingServer: !process.env.CI,
+    timeout: 180_000,
+  },
+})

@@ -1,0 +1,632 @@
+import { useEffect, useRef, useState } from 'react'
+import { useMapStore } from '../store/mapStore'
+import { useUi } from '../store/uiStore'
+import * as ops from '../model/ops'
+import * as storage from '../lib/storage'
+import { downloadBlob, exportDoc, importFile, SUPPORTED_EXTENSIONS, type ExportFormat, type PendingAddress } from '../io'
+import { importKml } from '../io/kml'
+import { itineraryHtml } from '../io/itineraryHtml'
+import { tripDays } from '../model/itinerary'
+import { geocode } from '../geo/search'
+import { askAi, extractMyMapsId, fetchMyMapsKml } from '../lib/api'
+import { isConfigured, isValidWorkerUrl, loadSettings, saveSettings, type Settings } from '../lib/settings'
+import { appBase } from '../lib/appBase'
+import { driveEnabled } from '../env'
+import * as drive from '../google/drive'
+import { getToken, isSignedIn, onAuthChange, signOut } from '../google/auth'
+import { openDriveMap, openLocal, resolveConflict, saveToDrive } from '../lib/driveSync'
+import type { Layer } from '../model/types'
+import { Dialog, Icon } from './ui'
+
+export function Dialogs() {
+  const dialog = useUi((s) => s.dialog)
+  const close = () => useUi.getState().openDialog(null)
+  return (
+    <>
+      <Dialog open={dialog === 'maps'} onClose={close} title="המפות שלי" wide>
+        <MapsDialog />
+      </Dialog>
+      <Dialog open={dialog === 'import'} onClose={close} title="ייבוא">
+        <ImportDialog />
+      </Dialog>
+      <Dialog open={dialog === 'export'} onClose={close} title="ייצוא">
+        <ExportDialog />
+      </Dialog>
+      <Dialog open={dialog === 'share'} onClose={close} title="שיתוף">
+        <ShareDialog />
+      </Dialog>
+      <Dialog open={dialog === 'settings'} onClose={close} title="הגדרות">
+        <SettingsDialog />
+      </Dialog>
+      <Dialog open={dialog === 'conflict'} onClose={close} title="המפה שונתה במקום אחר">
+        <ConflictDialog />
+      </Dialog>
+    </>
+  )
+}
+
+function useSignedIn() {
+  const [signed, setSigned] = useState(isSignedIn())
+  useEffect(() => onAuthChange(setSigned), [])
+  return signed
+}
+
+const when = (iso: string) => {
+  const d = new Date(iso)
+  return Number.isNaN(d.getTime()) ? '' : d.toLocaleString('he-IL', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+}
+
+// ---------------- Maps ----------------
+function MapsDialog() {
+  const current = useMapStore((s) => s.doc.id)
+  const [local, setLocal] = useState<storage.MapSummary[]>([])
+  const [remote, setRemote] = useState<drive.DriveFileMeta[] | null>(null)
+  const [busy, setBusy] = useState(false)
+  const signed = useSignedIn()
+  const close = () => useUi.getState().openDialog(null)
+
+  const refresh = () => storage.listMaps().then(setLocal)
+  useEffect(() => {
+    void refresh()
+  }, [])
+  useEffect(() => {
+    if (!signed || !driveEnabled()) return
+    getToken()
+      .then((token) => drive.listMaps({ token }))
+      .then(setRemote)
+      .catch(() => setRemote([]))
+  }, [signed])
+
+  const localDriveIds = new Set(local.map((m) => m.driveFileId).filter(Boolean))
+
+  return (
+    <div className="maps">
+      <div className="row row--wrap">
+        <button
+          type="button"
+          className="btn btn--primary"
+          onClick={async () => {
+            const d = ops.createMap()
+            await storage.saveMap(d)
+            await openLocal(d.id)
+            close()
+          }}
+        >
+          <Icon name="plus" size={18} /> מפה חדשה
+        </button>
+        <button
+          type="button"
+          className="btn"
+          onClick={async () => {
+            const copy = ops.duplicateMap(useMapStore.getState().doc)
+            await storage.saveMap(copy)
+            await openLocal(copy.id)
+            close()
+            useUi.getState().showToast('נוצר עותק של המפה')
+          }}
+        >
+          שכפל את המפה הנוכחית
+        </button>
+      </div>
+
+      <h3>במכשיר הזה</h3>
+      <ul className="map-list">
+        {local.map((m) => (
+          <li key={m.id} className={m.id === current ? 'is-current' : ''}>
+            <button
+              type="button"
+              className="map-list__main"
+              onClick={async () => {
+                await openLocal(m.id)
+                close()
+              }}
+            >
+              <strong>{m.title || 'ללא שם'}</strong>
+              <span>
+                {m.count} פריטים · {when(m.updatedAt)} {m.driveFileId ? '· ב-Drive' : ''}
+              </span>
+            </button>
+            <button
+              type="button"
+              className="icon-btn"
+              aria-label={`מחק את ${m.title} מהמכשיר`}
+              title="מחק מהמכשיר"
+              disabled={m.id === current}
+              onClick={async () => {
+                if (!confirm(`למחוק את "${m.title}" מהמכשיר?${m.driveFileId ? ' העותק ב-Drive יישאר.' : ''}`)) return
+                await storage.deleteMap(m.id)
+                void refresh()
+              }}
+            >
+              <Icon name="trash" size={18} />
+            </button>
+          </li>
+        ))}
+      </ul>
+
+      {driveEnabled() && (
+        <>
+          <h3>ב-Google Drive</h3>
+          {!signed ? (
+            <button type="button" className="btn" onClick={() => getToken(true).catch((e) => useUi.getState().showToast(e.message, { tone: 'error' }))}>
+              <Icon name="cloud" size={18} /> התחבר ל-Google כדי לראות מפות מ-Drive
+            </button>
+          ) : (
+            <>
+              {remote === null && <p className="hint">טוען…</p>}
+              {remote?.length === 0 && <p className="hint">אין עדיין מפות ב-Drive. פתח מפה ושמור אותה ב-Drive מתפריט השיתוף.</p>}
+              <ul className="map-list">
+                {remote
+                  ?.filter((f) => !localDriveIds.has(f.id))
+                  .map((f) => (
+                    <li key={f.id}>
+                      <button
+                        type="button"
+                        className="map-list__main"
+                        disabled={busy}
+                        onClick={async () => {
+                          setBusy(true)
+                          const r = await openDriveMap(f.id, undefined, { interactive: true })
+                          setBusy(false)
+                          if (r === 'ok') close()
+                        }}
+                      >
+                        <strong>{f.name.replace(/\.mymap\.json$/, '')}</strong>
+                        <span>
+                          {when(f.modifiedTime)} {f.ownedByMe === false ? '· שותפה איתך' : ''}
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+              </ul>
+              <button
+                type="button"
+                className="btn"
+                onClick={async () => {
+                  const r = await openDriveMap('', undefined, { picker: true })
+                  if (r === 'ok') close()
+                }}
+              >
+                בחר קובץ מ-Drive…
+              </button>
+            </>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
+// ---------------- Import ----------------
+function ImportDialog() {
+  const [mode, setMode] = useState<'current' | 'new'>('current')
+  const [status, setStatus] = useState('')
+  const [error, setError] = useState('')
+  const [link, setLink] = useState('')
+  const [drag, setDrag] = useState(false)
+  const fileRef = useRef<HTMLInputElement>(null)
+  const readOnly = useMapStore((s) => s.readOnly)
+  const close = () => useUi.getState().openDialog(null)
+
+  async function geocodePending(pending: PendingAddress[], layer: Layer): Promise<Layer> {
+    const features = [...layer.features]
+    const max = Math.min(pending.length, 150)
+    for (let i = 0; i < max; i++) {
+      setStatus(`מאתר כתובות ${i + 1}/${max}…`)
+      const hit = await geocode(pending[i].address).catch(() => null)
+      if (hit)
+        features.push(
+          ops.createFeature({ type: 'Point', coordinates: [hit.lng, hit.lat] }, { name: pending[i].name, description: [pending[i].description, pending[i].address].filter(Boolean).join('\n'), color: layer.color }),
+        )
+    }
+    return { ...layer, features }
+  }
+
+  async function finish(title: string | undefined, layers: Layer[]) {
+    const count = layers.reduce((n, l) => n + l.features.length, 0)
+    if (mode === 'new' || readOnly) {
+      const d = { ...ops.createMap(title ?? 'מפה מיובאת'), layers }
+      await storage.saveMap(d)
+      await openLocal(d.id)
+    } else {
+      useMapStore.getState().apply((d) => ops.batch(d, layers.map((l) => (x) => ops.addLayer(x, l))))
+      useUi.getState().focusOn({ all: true })
+    }
+    useUi.getState().showToast(`יובאו ${count} פריטים ב-${layers.length} שכבות`)
+    close()
+  }
+
+  async function onFiles(files: FileList | File[]) {
+    setError('')
+    const all: Layer[] = []
+    let title: string | undefined
+    try {
+      for (const file of Array.from(files)) {
+        setStatus(`קורא את ${file.name}…`)
+        const r = await importFile(file)
+        title ??= r.title ?? file.name.replace(/\.[^.]+$/, '')
+        const layers = [...r.layers]
+        if (r.pending.length) layers[0] = await geocodePending(r.pending, layers[0])
+        all.push(...layers)
+      }
+      await finish(title, all)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'הייבוא נכשל')
+    } finally {
+      setStatus('')
+    }
+  }
+
+  async function fromMyMaps() {
+    setError('')
+    const mid = extractMyMapsId(link)
+    if (!mid) return setError('לא זוהה קישור של Google My Maps. הדבק קישור שמכיל mid=')
+    const settings = loadSettings()
+    if (!isConfigured(settings)) return setError('ייבוא מקישור דורש Worker. הגדר אותו בהגדרות.')
+    try {
+      setStatus('מוריד מ-Google My Maps…')
+      const r = importKml(await fetchMyMapsKml(settings, mid))
+      await finish(r.title, r.layers)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'הייבוא נכשל')
+    } finally {
+      setStatus('')
+    }
+  }
+
+  return (
+    <div className="import">
+      {!readOnly && (
+        <fieldset className="seg" aria-label="לאן לייבא">
+          <button type="button" className={mode === 'current' ? 'is-on' : ''} aria-pressed={mode === 'current'} onClick={() => setMode('current')}>
+            לתוך המפה הנוכחית
+          </button>
+          <button type="button" className={mode === 'new' ? 'is-on' : ''} aria-pressed={mode === 'new'} onClick={() => setMode('new')}>
+            כמפה חדשה
+          </button>
+        </fieldset>
+      )}
+      <div
+        className={`drop ${drag ? 'is-over' : ''}`}
+        onDragOver={(e) => {
+          e.preventDefault()
+          setDrag(true)
+        }}
+        onDragLeave={() => setDrag(false)}
+        onDrop={(e) => {
+          e.preventDefault()
+          setDrag(false)
+          void onFiles(e.dataTransfer.files)
+        }}
+      >
+        <Icon name="upload" size={28} />
+        <p>גרור קבצים לכאן או</p>
+        <button type="button" className="btn btn--primary" onClick={() => fileRef.current?.click()}>
+          בחר קובץ
+        </button>
+        <p className="hint">KML, KMZ, GeoJSON, CSV, GPX. קבצי CSV צריכים עמודות lat/lng, WKT או כתובת.</p>
+        <input ref={fileRef} type="file" hidden multiple accept={SUPPORTED_EXTENSIONS.join(',')} onChange={(e) => e.target.files && void onFiles(e.target.files)} />
+      </div>
+      <div className="field">
+        <span>או ייבוא מקישור של Google My Maps (משותף לכל מי שיש לו קישור)</span>
+        <div className="row">
+          <input value={link} onChange={(e) => setLink(e.target.value)} placeholder="https://www.google.com/maps/d/…?mid=…" dir="ltr" />
+          <button type="button" className="btn" onClick={fromMyMaps} disabled={!link.trim()}>
+            ייבא
+          </button>
+        </div>
+      </div>
+      {status && <p className="status" role="status">{status}</p>}
+      {error && <p className="error" role="alert">{error}</p>}
+    </div>
+  )
+}
+
+// ---------------- Export ----------------
+function ExportDialog() {
+  const doc = useMapStore((s) => s.doc)
+  const hasDays = tripDays(doc).length > 0
+  const run = async (f: ExportFormat) => {
+    const { blob, filename } = await exportDoc(doc, f)
+    downloadBlob(blob, filename)
+  }
+  const formats: { f: ExportFormat; title: string; text: string }[] = [
+    { f: 'kml', title: 'KML', text: 'לייבוא ל-Google My Maps ול-Google Earth' },
+    { f: 'kmz', title: 'KMZ', text: 'KML דחוס' },
+    { f: 'geojson', title: 'GeoJSON', text: 'לכלי GIS ומפתחים' },
+    { f: 'csv', title: 'CSV', text: 'לאקסל ול-Google Sheets' },
+  ]
+  return (
+    <div className="export">
+      <ul className="export__list">
+        {formats.map((x) => (
+          <li key={x.f}>
+            <button type="button" className="export__item" onClick={() => void run(x.f)}>
+              <Icon name="download" />
+              <span>
+                <strong>{x.title}</strong>
+                <span>{x.text}</span>
+              </span>
+            </button>
+          </li>
+        ))}
+        <li>
+          <button
+            type="button"
+            className="export__item"
+            disabled={!hasDays}
+            onClick={() => downloadBlob(new Blob([itineraryHtml(doc, { appBase: appBase() })], { type: 'text/html;charset=utf-8' }), `${doc.title || 'trip'} - מסלול.html`)}
+          >
+            <Icon name="route" />
+            <span>
+              <strong>מסלול לטיול (HTML)</strong>
+              <span>{hasDays ? 'דף אחד עם הימים, העצירות וקישורי ניווט. עובד גם בלי אינטרנט.' : 'זמין כשיש במפה ימי טיול'}</span>
+            </span>
+          </button>
+        </li>
+      </ul>
+      <p className="hint">כדי להעביר ל-Google My Maps: ייצא KML, ואז ב-My Maps בחר "ייבוא" בשכבה חדשה.</p>
+    </div>
+  )
+}
+
+// ---------------- Share ----------------
+function ShareDialog() {
+  const doc = useMapStore((s) => s.doc)
+  const readOnly = useMapStore((s) => s.readOnly)
+  const signed = useSignedIn()
+  const [perms, setPerms] = useState<drive.Permission[] | null>(null)
+  const [email, setEmail] = useState('')
+  const [role, setRole] = useState<'writer' | 'reader'>('writer')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const fileId = doc.driveFileId
+  const link = fileId ? drive.shareUrl(appBase(), fileId) : ''
+  const linkOn = perms?.some((p) => p.type === 'anyone') ?? false
+
+  const load = async () => {
+    if (!fileId || !signed) return
+    try {
+      setPerms(await drive.listPermissions({ token: await getToken() }, fileId))
+    } catch (e) {
+      setPerms([])
+      setError(e instanceof Error ? e.message : '')
+    }
+  }
+  useEffect(() => {
+    void load()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fileId, signed])
+
+  const guard = async (fn: () => Promise<void>) => {
+    setBusy(true)
+    setError('')
+    try {
+      await fn()
+      await load()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'הפעולה נכשלה')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const copy = async () => {
+    try {
+      if (navigator.share && matchMedia('(pointer: coarse)').matches) await navigator.share({ title: doc.title, url: link })
+      else {
+        await navigator.clipboard.writeText(link)
+        useUi.getState().showToast('הקישור הועתק')
+      }
+    } catch {
+      /* cancelled */
+    }
+  }
+
+  if (!driveEnabled()) {
+    return (
+      <div className="share">
+        <p>שיתוף עובד דרך Google Drive, וצריך להגדיר אותו פעם אחת באפליקציה (מזהה OAuth של Google). ההוראות בקובץ README של הפרויקט.</p>
+        <p className="hint">בינתיים אפשר לשתף קובץ: ייצא KML או מסלול HTML ושלח אותו.</p>
+        <button type="button" className="btn" onClick={() => useUi.getState().openDialog('export')}>
+          פתח ייצוא
+        </button>
+      </div>
+    )
+  }
+
+  if (readOnly) {
+    return (
+      <div className="share">
+        <p>זו מפה ששותפה איתך לצפייה.</p>
+        {link && (
+          <button type="button" className="btn btn--primary" onClick={copy}>
+            העתק קישור
+          </button>
+        )}
+      </div>
+    )
+  }
+
+  if (!fileId) {
+    return (
+      <div className="share">
+        <p>כדי לשתף, שמור את המפה ב-Google Drive שלך. היא תישמר בתיקייה "MyMaps AI" ותתעדכן אוטומטית.</p>
+        <button type="button" className="btn btn--primary" disabled={busy} onClick={() => guard(async () => void (await saveToDrive({ interactive: true })))}>
+          <Icon name="cloud" size={18} /> שמור ב-Drive
+        </button>
+        {error && <p className="error" role="alert">{error}</p>}
+      </div>
+    )
+  }
+
+  if (!signed) {
+    return (
+      <div className="share">
+        <p>התחבר ל-Google כדי לנהל את השיתוף.</p>
+        <button type="button" className="btn btn--primary" onClick={() => getToken(true).catch((e) => setError(e.message))}>
+          התחבר ל-Google
+        </button>
+        {error && <p className="error" role="alert">{error}</p>}
+      </div>
+    )
+  }
+
+  return (
+    <div className="share">
+      <section>
+        <label className="check">
+          <input
+            type="checkbox"
+            checked={linkOn}
+            disabled={busy || perms === null}
+            onChange={(e) => guard(async () => drive.setLinkSharing({ token: await getToken() }, fileId, e.target.checked))}
+          />
+          <span>כל מי שיש לו את הקישור יכול לצפות (בלי להתחבר)</span>
+        </label>
+        <div className="row">
+          <input readOnly value={link} dir="ltr" aria-label="קישור למפה" onFocus={(e) => e.target.select()} />
+          <button type="button" className="btn" onClick={copy}>
+            {typeof navigator.share === 'function' ? 'שתף' : 'העתק'}
+          </button>
+        </div>
+        {!linkOn && <p className="hint">כשהאפשרות כבויה, הקישור עובד רק לאנשים שהוזמנו.</p>}
+      </section>
+
+      <section>
+        <h3>הזמנת אנשים</h3>
+        <form
+          className="row row--wrap"
+          onSubmit={(e) => {
+            e.preventDefault()
+            if (!/^\S+@\S+\.\S+$/.test(email.trim())) return setError('כתובת מייל לא תקינה')
+            void guard(async () => {
+              await drive.shareWith({ token: await getToken() }, fileId, email, role, `${doc.title}\n${link}`)
+              setEmail('')
+              useUi.getState().showToast('ההזמנה נשלחה')
+            })
+          }}
+        >
+          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@gmail.com" dir="ltr" aria-label="מייל" required />
+          <select value={role} onChange={(e) => setRole(e.target.value as 'writer' | 'reader')} aria-label="הרשאה">
+            <option value="writer">עריכה</option>
+            <option value="reader">צפייה</option>
+          </select>
+          <button type="submit" className="btn btn--primary" disabled={busy}>
+            הזמן
+          </button>
+        </form>
+        <ul className="people">
+          {perms
+            ?.filter((p) => p.type !== 'anyone')
+            .map((p) => (
+              <li key={p.id}>
+                <span>
+                  <strong>{p.displayName || p.emailAddress}</strong>
+                  <span>{p.role === 'owner' ? 'בעלים' : p.role === 'writer' ? 'עריכה' : 'צפייה'}</span>
+                </span>
+                {p.role !== 'owner' && (
+                  <button type="button" className="icon-btn" aria-label={`הסר את ${p.emailAddress}`} disabled={busy} onClick={() => guard(async () => drive.removePermission({ token: await getToken() }, fileId, p.id))}>
+                    <Icon name="close" size={18} />
+                  </button>
+                )}
+              </li>
+            ))}
+        </ul>
+        <p className="hint">מוזמנים פותחים את הקישור ונכנסים עם חשבון Google. בפעם הראשונה Google תבקש מהם לאשר את הקובץ.</p>
+      </section>
+      {error && <p className="error" role="alert">{error}</p>}
+    </div>
+  )
+}
+
+// ---------------- Settings ----------------
+function SettingsDialog() {
+  const [s, setS] = useState<Settings>(loadSettings)
+  const [test, setTest] = useState('')
+  const signed = useSignedIn()
+  const valid = !s.workerUrl || isValidWorkerUrl(s.workerUrl)
+  return (
+    <form
+      className="settings"
+      onSubmit={(e) => {
+        e.preventDefault()
+        setS(saveSettings(s))
+        useUi.getState().showToast('ההגדרות נשמרו')
+        useUi.getState().openDialog(null)
+      }}
+    >
+      <h3>עוזר AI</h3>
+      <label className="field">
+        <span>כתובת ה-Worker</span>
+        <input value={s.workerUrl} onChange={(e) => setS({ ...s, workerUrl: e.target.value })} placeholder="https://mymaps-ai-worker.<you>.workers.dev" dir="ltr" aria-invalid={!valid} />
+      </label>
+      {!valid && <p className="error">הכתובת צריכה להתחיל ב-https://</p>}
+      <label className="field">
+        <span>APP_TOKEN</span>
+        <input type="password" value={s.appToken} onChange={(e) => setS({ ...s, appToken: e.target.value })} autoComplete="off" dir="ltr" />
+      </label>
+      <div className="row">
+        <button
+          type="button"
+          className="btn"
+          disabled={!isConfigured(s)}
+          onClick={async () => {
+            setTest('בודק…')
+            try {
+              await askAi(s, 'Reply with {"reply":"ok"}', [{ role: 'user', content: 'ping' }])
+              setTest('החיבור עובד ✓')
+            } catch (e) {
+              setTest(e instanceof Error ? e.message : 'נכשל')
+            }
+          }}
+        >
+          בדוק חיבור
+        </button>
+        {test && <span role="status">{test}</span>}
+      </div>
+
+      {driveEnabled() && (
+        <>
+          <h3>Google Drive</h3>
+          {signed ? (
+            <button type="button" className="btn" onClick={() => void signOut()}>
+              התנתק מ-Google
+            </button>
+          ) : (
+            <button type="button" className="btn" onClick={() => getToken(true).catch((e) => useUi.getState().showToast(e.message, { tone: 'error' }))}>
+              התחבר ל-Google
+            </button>
+          )}
+        </>
+      )}
+
+      <div className="row dialog__foot">
+        <button type="submit" className="btn btn--primary" disabled={!valid}>
+          שמור
+        </button>
+      </div>
+      <p className="hint">מפות נשמרות במכשיר הזה{driveEnabled() ? ' וב-Google Drive שלך' : ''}. ה-AI מקבל את תוכן המפה כדי לענות.</p>
+    </form>
+  )
+}
+
+// ---------------- Conflict ----------------
+function ConflictDialog() {
+  return (
+    <div className="conflict">
+      <p>מישהו (או מכשיר אחר) שמר את המפה ב-Drive אחרי השמירה האחרונה שלך. מה לעשות?</p>
+      <div className="stack">
+        <button type="button" className="btn btn--primary" onClick={() => void resolveConflict('copy')}>
+          שמור את הגרסה שלי כמפה חדשה
+        </button>
+        <button type="button" className="btn" onClick={() => void resolveConflict('theirs')}>
+          טען את הגרסה מ-Drive (השינויים שלי יאבדו)
+        </button>
+        <button type="button" className="btn btn--danger" onClick={() => void resolveConflict('mine')}>
+          דרוס עם הגרסה שלי
+        </button>
+      </div>
+    </div>
+  )
+}

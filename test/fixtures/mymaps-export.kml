@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+  <Document>
+    <name>חופשה בצפון</name>
+    <description/>
+    <Style id="icon-1899-0288D1-normal">
+      <IconStyle><color>ffd18802</color><scale>1</scale><Icon><href>https://www.gstatic.com/mapspro/images/stock/503-wht-blank_maps.png</href></Icon></IconStyle>
+    </Style>
+    <Style id="icon-1899-0288D1-highlight">
+      <IconStyle><color>ffd18802</color><scale>1.1</scale><Icon><href>https://www.gstatic.com/mapspro/images/stock/503-wht-blank_maps.png</href></Icon></IconStyle>
+    </Style>
+    <StyleMap id="icon-1899-0288D1">
+      <Pair><key>normal</key><styleUrl>#icon-1899-0288D1-normal</styleUrl></Pair>
+      <Pair><key>highlight</key><styleUrl>#icon-1899-0288D1-highlight</styleUrl></Pair>
+    </StyleMap>
+    <Style id="line-E65100-5000-nodesc-normal">
+      <LineStyle><color>ff0051e6</color><width>5</width></LineStyle>
+    </Style>
+    <Folder>
+      <name>מסעדות</name>
+      <Placemark>
+        <name>מסעדה &amp; בר</name>
+        <description><![CDATA[אוכל <b>מעולה</b>]]></description>
+        <styleUrl>#icon-1899-0288D1</styleUrl>
+        <Point><coordinates>35.5,32.8,0</coordinates></Point>
+      </Placemark>
+      <Folder>
+        <name>תת-תיקייה</name>
+        <Placemark>
+          <name>בית קפה</name>
+          <styleUrl>#icon-1899-FF5252</styleUrl>
+          <Point><coordinates>35.51,32.81,0</coordinates></Point>
+        </Placemark>
+      </Folder>
+    </Folder>
+    <Folder>
+      <name>מסלול</name>
+      <Placemark>
+        <name>שביל</name>
+        <styleUrl>#line-E65100-5000-nodesc-normal</styleUrl>
+        <MultiGeometry>
+          <LineString><coordinates>35.5,32.8,0 35.6,32.9,0</coordinates></LineString>
+          <Point><coordinates>35.6,32.9,0</coordinates></Point>
+        </MultiGeometry>
+      </Placemark>
+    </Folder>
+  </Document>
+</kml>
