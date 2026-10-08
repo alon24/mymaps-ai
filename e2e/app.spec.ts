@@ -94,6 +94,9 @@ test('AI proposes changes, user applies them, undo reverts', async ({ page }) =>
   await addPoint(page, 'ב', 0.6, 0.45)
   // Same-origin mock Worker (no CORS preflight involved)
   let requests = 0
+  const errors: string[] = []
+  page.on('pageerror', (e) => errors.push(e.message))
+  page.on('console', (m) => m.type() === 'error' && errors.push(m.text()))
   page.on('request', (r) => r.url().includes('__worker') && requests++)
   await page.route('**/__worker/ai', async (route) => {
     const body = route.request().postDataJSON() as { system: string }
@@ -111,8 +114,11 @@ test('AI proposes changes, user applies them, undo reverts', async ({ page }) =>
   await page.getByLabel('הודעה לעוזר').fill('תכנן יום')
   await page.getByRole('button', { name: 'שלח' }).click()
   await page.locator('.msg--assistant:not(.msg--typing)').first().waitFor({ timeout: 8000 }).catch(() => undefined)
-  const state = `${await page.locator('.ai').innerText()} | requests=${requests}`
-  expect(state).toContain('יצרתי יום אחד')
+  const state = await page.evaluate(
+    (r) => `url=${location.href} | requests=${r} | ai=${document.querySelector('.ai')?.textContent ?? 'MISSING'} | body=${document.body.innerText.slice(0, 300)}`,
+    requests,
+  )
+  expect(`${state} | errors=${errors.join(' ; ')}`).toContain('יצרתי יום אחד')
   await expect(page.locator('.proposal li')).toHaveText([/שכבה חדשה "יום 1"/, /העברת 2 פריטים/])
   await page.getByRole('button', { name: /החל שינויים/ }).click()
   await expect(page.locator('.pin--num')).toHaveCount(2)
