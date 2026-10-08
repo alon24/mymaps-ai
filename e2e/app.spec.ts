@@ -93,6 +93,8 @@ test('AI proposes changes, user applies them, undo reverts', async ({ page }) =>
   await addPoint(page, 'א', 0.45, 0.4)
   await addPoint(page, 'ב', 0.6, 0.45)
   // Same-origin mock Worker (no CORS preflight involved)
+  let requests = 0
+  page.on('request', (r) => r.url().includes('__worker') && requests++)
   await page.route('**/__worker/ai', async (route) => {
     const body = route.request().postDataJSON() as { system: string }
     const ids = [...body.system.matchAll(/"id":"([^"]+)","name":"(א|ב)"/g)].map((m) => m[1])
@@ -108,7 +110,9 @@ test('AI proposes changes, user applies them, undo reverts', async ({ page }) =>
   await page.getByRole('tab', { name: /AI/ }).click()
   await page.getByLabel('הודעה לעוזר').fill('תכנן יום')
   await page.getByRole('button', { name: 'שלח' }).click()
-  await expect(page.locator('.msg--assistant').last()).toContainText('יצרתי יום אחד')
+  await expect
+    .poll(async () => (await page.locator('.ai').innerText()) + ` | requests=${requests} settings=${await page.evaluate(() => localStorage.getItem('mymaps-ai.settings'))}`, { timeout: 8000 })
+    .toContain('יצרתי יום אחד')
   await expect(page.locator('.proposal li')).toHaveText([/שכבה חדשה "יום 1"/, /העברת 2 פריטים/])
   await page.getByRole('button', { name: /החל שינויים/ }).click()
   await expect(page.locator('.pin--num')).toHaveCount(2)
