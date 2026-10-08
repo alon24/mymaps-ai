@@ -7,7 +7,7 @@ import { formatDistance } from '../geo/measure'
 import { formatDate, itineraryHtml } from '../io/itineraryHtml'
 import { downloadBlob } from '../io'
 import { startSort } from '../lib/sortable'
-import { Icon } from './ui'
+import { EmptyArt, Icon } from './ui'
 import { appBase } from '../lib/appBase'
 import { distanceFromMe } from '../lib/location'
 import { googleSearchUrl } from '../model/itinerary'
@@ -65,17 +65,22 @@ export function ItineraryPanel() {
             <Icon name="plus" size={18} /> הוסף יום
           </button>
         )}
-        <button type="button" className="btn" onClick={exportHtml} disabled={!days.length}>
-          <Icon name="download" size={18} /> מסלול לטיול (HTML)
-        </button>
-        <button type="button" className="btn" onClick={() => window.print()} disabled={!days.length}>
-          הדפס
-        </button>
+        {days.length > 0 && (
+          <>
+            <button type="button" className="btn" onClick={exportHtml}>
+              <Icon name="download" size={18} /> מסלול לטיול (HTML)
+            </button>
+            <button type="button" className="btn" onClick={() => window.print()}>
+              הדפס
+            </button>
+          </>
+        )}
       </div>
 
       {!days.length && (
-        <div className="empty">
-          <p>אין עדיין ימי טיול.</p>
+        <div className="empty welcome">
+          <EmptyArt />
+          <p><strong>אין עדיין ימי טיול.</strong></p>
           <p>הוסף יום, או סמן שכבה קיימת כ"יום בטיול" בהגדרות השכבה. אפשר גם לבקש מה-AI לחלק את המקומות לימים.</p>
         </div>
       )}

@@ -33,8 +33,8 @@ const esc = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`)
 /** Effective color of a feature given its layer style. */
 export const featureColor = (f: MapFeature, layer: Layer) => (layer.style === 'individual' ? f.properties.color : layer.color)
 
-function pinIcon(color: string, label: string, opts: { selected: boolean; highlighted: boolean; numbered: boolean }) {
-  const cls = ['pin', opts.selected && 'pin--selected', opts.highlighted && 'pin--highlight', opts.numbered && 'pin--num']
+function pinIcon(color: string, label: string, opts: { selected: boolean; highlighted: boolean; numbered: boolean; drop?: boolean; pop?: boolean }) {
+  const cls = ['pin', opts.selected && 'pin--selected', opts.highlighted && 'pin--highlight', opts.numbered && 'pin--num', opts.drop && 'pin--drop', opts.pop && 'pin--pop']
     .filter(Boolean)
     .join(' ')
   const size = opts.selected ? 40 : 32
@@ -82,6 +82,8 @@ export function MapView() {
   const drawnRef = useRef<L.LayerGroup | null>(null)
   const extrasRef = useRef<L.LayerGroup | null>(null)
   const measureRef = useRef<{ pts: L.LatLng[]; group: L.LayerGroup }>({ pts: [], group: L.layerGroup() })
+  // For one-shot animations: which pins existed in the previous render, and the previous selection
+  const seenRef = useRef<{ docId: string; ids: Set<string>; selected: string | null }>({ docId: '', ids: new Set(), selected: null })
   const [measureText, setMeasureText] = useState('')
 
   const doc = useMapStore((s) => s.doc)
@@ -238,6 +240,9 @@ export function MapView() {
     group.clearLayers()
     const numbers = sequenceNumbers(doc)
     const hl = new Set(highlights)
+    const seen = seenRef.current
+    const sameDoc = seen.docId === doc.id
+    const nextIds = new Set<string>()
 
     for (const layer of doc.layers) {
       if (!layer.visible) continue
@@ -257,8 +262,15 @@ export function MapView() {
         if (g.type === 'Point') {
           const n = numbers.get(id)
           const label = n !== undefined ? String(n) : f.properties.icon ?? ''
+          nextIds.add(id)
           const marker = L.marker([g.coordinates[1], g.coordinates[0]], {
-            icon: pinIcon(color, label, { selected, highlighted: hl.has(id), numbered: n !== undefined }),
+            icon: pinIcon(color, label, {
+              selected,
+              highlighted: hl.has(id),
+              numbered: n !== undefined,
+              drop: sameDoc && !seen.ids.has(id),
+              pop: selected && seen.selected !== id,
+            }),
             draggable: editable,
             autoPan: true,
             zIndexOffset: selected ? 1000 : hl.has(id) ? 500 : 0,
@@ -284,6 +296,11 @@ export function MapView() {
           useUi.getState().setSheet(useUi.getState().sheet === 'peek' ? 'half' : useUi.getState().sheet)
         })
         lyr.addTo(group)
+        if (g.type !== 'Point' && sameDoc && !seen.ids.has(id)) {
+          const el = (lyr as L.Path).getElement?.()
+          el?.classList.add('shape--new')
+        }
+        nextIds.add(id)
         if (editable && g.type !== 'Point') {
           ;(lyr as L.Polyline).pm.enable({ allowSelfIntersection: true, snappable: false } as never)
           lyr.on('pm:update', () => {
@@ -293,6 +310,7 @@ export function MapView() {
         }
       }
     }
+    seenRef.current = { docId: doc.id, ids: nextIds, selected: selectedId }
   }, [doc, selectedId, highlights, readOnly, tool])
 
   // ---------- extras: search pin, user location ----------

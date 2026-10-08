@@ -133,3 +133,19 @@ export function Swatches({ value, onChange, colors }: { value: string; onChange:
     </div>
   )
 }
+
+/** Small folded-map illustration for empty states. */
+export function EmptyArt() {
+  return (
+    <svg className="empty-art" viewBox="0 0 160 96" aria-hidden="true">
+      <path d="M8 22l44-14 56 14 44-14v66l-44 14-56-14-44 14z" fill="var(--raise)" stroke="var(--line)" strokeWidth="2" strokeLinejoin="round" />
+      <path d="M52 8v66M108 22v66" stroke="var(--line)" strokeWidth="2" />
+      <path d="M26 62c14-18 30 6 46-8s28-22 46-10" fill="none" stroke="var(--accent)" strokeWidth="3" strokeDasharray="2 7" strokeLinecap="round" />
+      <g className="empty-art__pin">
+        <path d="M118 16c-7 0-12 5-12 11.5C106 36 118 48 118 48s12-12 12-20.5C130 21 125 16 118 16z" fill="var(--mark)" stroke="var(--ink)" strokeWidth="2" />
+        <circle cx="118" cy="27.5" r="4" fill="var(--ink)" />
+      </g>
+      <circle cx="26" cy="62" r="5" fill="var(--accent)" />
+    </svg>
+  )
+}

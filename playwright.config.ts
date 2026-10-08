@@ -4,6 +4,8 @@ export default defineConfig({
   testDir: './e2e',
   timeout: 60_000,
   retries: process.env.CI ? 1 : 0,
+  // 'github' turns failures into annotations on the workflow run
+  reporter: process.env.CI ? [['github'], ['line']] : 'line',
   use: {
     baseURL: 'http://localhost:4173',
     locale: 'he-IL',

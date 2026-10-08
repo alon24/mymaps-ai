@@ -160,6 +160,60 @@ function AccessGate({ outcome, retry }: { outcome: OpenOutcome; retry: (o: { int
   )
 }
 
+const SNAPS = ['peek', 'half', 'full'] as const
+
+/** Phone bottom-sheet handle: drag to resize (snaps by position and flick velocity), tap to cycle. */
+function SheetGrabber({ onTap }: { onTap: () => void }) {
+  return (
+    <button
+      type="button"
+      className="panel__grabber"
+      aria-label="הגדל או הקטן את הפאנל"
+      onPointerDown={(e) => {
+        const panel = (e.currentTarget as HTMLElement).closest<HTMLElement>('.panel')
+        if (!panel || window.innerWidth >= 900) return
+        const startY = e.clientY
+        const startH = panel.getBoundingClientRect().height
+        let lastY = startY
+        let lastT = performance.now()
+        let v = 0
+        let moved = false
+        panel.classList.add('is-dragging')
+        const move = (ev: PointerEvent) => {
+          const now = performance.now()
+          v = (ev.clientY - lastY) / Math.max(1, now - lastT)
+          lastY = ev.clientY
+          lastT = now
+          if (Math.abs(ev.clientY - startY) > 6) moved = true
+          const h = Math.max(120, Math.min(window.innerHeight - 64, startH - (ev.clientY - startY)))
+          panel.style.setProperty('--sheet-h', `${h}px`)
+        }
+        const up = () => {
+          window.removeEventListener('pointermove', move)
+          window.removeEventListener('pointerup', up)
+          window.removeEventListener('pointercancel', up)
+          panel.classList.remove('is-dragging')
+          panel.style.removeProperty('--sheet-h')
+          if (!moved) return onTap()
+          const h = startH - (lastY - startY)
+          const heights = { peek: 148, half: window.innerHeight * 0.52, full: window.innerHeight - 72 }
+          let target = SNAPS.reduce((best, s) => (Math.abs(heights[s] - h) < Math.abs(heights[best] - h) ? s : best), 'half' as (typeof SNAPS)[number])
+          // a flick wins over position
+          if (v < -0.6) target = h > heights.half ? 'full' : 'half'
+          if (v > 0.6) target = h < heights.half ? 'peek' : 'half'
+          useUi.getState().setSheet(target)
+        }
+        window.addEventListener('pointermove', move)
+        window.addEventListener('pointerup', up)
+        window.addEventListener('pointercancel', up)
+      }}
+      onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), onTap())}
+    >
+      <span />
+    </button>
+  )
+}
+
 export default function App() {
   const tab = useUi((s) => s.tab)
   const sheet = useUi((s) => s.sheet)
@@ -212,6 +266,7 @@ export default function App() {
   }
 
   const cycleSheet = () => useUi.getState().setSheet(sheet === 'peek' ? 'half' : sheet === 'half' ? 'full' : 'peek')
+  const tabIndex = TABS.findIndex((t) => t.id === tab)
 
   return (
     <div className={`app sheet-${sheet} ${readOnly ? 'is-readonly' : ''}`}>
@@ -222,9 +277,7 @@ export default function App() {
       </main>
 
       <aside className="panel" aria-label="פאנל המפה">
-        <button type="button" className="panel__grabber" onClick={cycleSheet} aria-label="הגדל או הקטן את הפאנל">
-          <span />
-        </button>
+        <SheetGrabber onTap={cycleSheet} />
         <header className="panel__head">
           <div className="panel__title">
             <Title />
@@ -233,12 +286,13 @@ export default function App() {
           <Menu />
         </header>
         {selected ? (
-          <div className="panel__body" data-sort-scroll>
+          <div className="panel__body" data-sort-scroll key={`edit-${selected}`}>
             <FeatureEditor />
           </div>
         ) : (
           <>
-            <nav className="tabs" role="tablist" aria-label="תצוגות">
+            <nav className="tabs" role="tablist" aria-label="תצוגות" style={{ '--i': tabIndex } as React.CSSProperties}>
+              <span className="tabs__ink" aria-hidden="true" />
               {TABS.map((t) => (
                 <button
                   key={t.id}
@@ -255,7 +309,7 @@ export default function App() {
                 </button>
               ))}
             </nav>
-            <div className="panel__body" data-sort-scroll role="tabpanel">
+            <div className="panel__body" data-sort-scroll role="tabpanel" key={tab}>
               {tab === 'layers' && <LayersPanel />}
               {tab === 'itinerary' && <ItineraryPanel />}
               {tab === 'ai' && <AiPanel />}

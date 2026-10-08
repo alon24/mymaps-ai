@@ -7,7 +7,7 @@ import { PALETTE } from '../model/types'
 import { dayRouteUrls, sequenceNumbers, stopsOf } from '../model/itinerary'
 import { formatDistance } from '../geo/measure'
 import { startSort } from '../lib/sortable'
-import { Icon, IconButton, Swatches } from './ui'
+import { EmptyArt, Icon, IconButton, Swatches } from './ui'
 import { featureColor } from './MapView'
 
 /** Show/hide layers. Viewers of shared maps can toggle too (not saved, no undo entry). */
@@ -189,6 +189,15 @@ export function LayersPanel() {
       </div>
 
       {doc.layers.length === 0 && <p className="empty">אין שכבות. הוסף שכבה כדי להתחיל לסמן מקומות.</p>}
+      {!readOnly && doc.layers.length > 0 && ops.featureCount(doc) === 0 && (
+        <div className="welcome">
+          <EmptyArt />
+          <p>
+            <strong>המפה ריקה.</strong> חפש מקום למעלה, בחר <Icon name="pin" size={16} /> והקש על המפה, או לחיצה ארוכה במקום כלשהו.
+          </p>
+          <p className="hint">יש לך מפה מ-Google My Maps? ייבא אותה מהתפריט.</p>
+        </div>
+      )}
 
       {doc.layers.map((layer, i) => {
         const visible = layer.features.filter(matches)
