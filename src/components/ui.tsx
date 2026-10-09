@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 
 const PATHS: Record<string, string> = {
   pointer: 'M5 3l13 7-6 1.5L9.5 18z',
@@ -147,5 +147,58 @@ export function EmptyArt() {
       </g>
       <circle cx="26" cy="62" r="5" fill="var(--accent)" />
     </svg>
+  )
+}
+
+/**
+ * Inline rename with explicit ✓ / ✕ (phones have no obvious way to "leave" an input).
+ * Enter / ✓ / tapping elsewhere save; Escape / ✕ cancel.
+ */
+export function RenameField({
+  value,
+  label,
+  className = '',
+  onSave,
+  onDone,
+}: {
+  value: string
+  label: string
+  className?: string
+  onSave: (v: string) => void
+  onDone: () => void
+}) {
+  const [v, setV] = useState(value)
+  const done = useRef(false)
+  const finish = (save: boolean) => {
+    if (done.current) return
+    done.current = true
+    const next = v.trim()
+    if (save && next && next !== value) onSave(next)
+    onDone()
+  }
+  // Keep focus in the input when pressing the buttons, so blur doesn't save before ✕ runs
+  const keepFocus = (e: React.PointerEvent | React.MouseEvent) => e.preventDefault()
+  return (
+    <div className={`rename ${className}`}>
+      <input
+        value={v}
+        autoFocus
+        aria-label={label}
+        enterKeyHint="done"
+        onFocus={(e) => e.target.select()}
+        onChange={(e) => setV(e.target.value)}
+        onBlur={() => finish(true)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') finish(true)
+          if (e.key === 'Escape') finish(false)
+        }}
+      />
+      <button type="button" className="rename__btn rename__ok" aria-label="שמור שם" onPointerDown={keepFocus} onMouseDown={keepFocus} onClick={() => finish(true)}>
+        <Icon name="check" size={18} />
+      </button>
+      <button type="button" className="rename__btn" aria-label="בטל שינוי שם" onPointerDown={keepFocus} onMouseDown={keepFocus} onClick={() => finish(false)}>
+        <Icon name="close" size={18} />
+      </button>
+    </div>
   )
 }

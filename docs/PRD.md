@@ -104,6 +104,8 @@ Priority: **P0** = v1 must, **P1** = v1 should, **P2** = later.
 - P0 Itinerary HTML (see 4.5).
 - P0 Round-trip guarantee: export → import keeps layers, names, descriptions, colors, icons and geometry (tested).
 
+- P0 Touch: renaming the map or a layer is a long press (click on desktop), with ✓ / ✕ buttons; a plain tap never starts a rename. The phone sheet drags from its whole header; the app disables pull-to-refresh so dragging never reloads it.
+
 ### 4.8 Google Drive storage and sharing
 - P0 Sign in with Google (scope `drive.file` only — the app sees only files it created or the user opened with it).
 - P0 **Drive-first when signed in**: a "Sign in" button in the panel header (Google). Once signed in, every map with content is stored in Drive automatically (local-only maps are uploaded on sign-in; new maps on their first edit), so any device signed in to the same Google account sees the same maps. A "My maps" button in the header lists the Drive maps first, then maps that exist only on this device.

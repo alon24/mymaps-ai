@@ -40,6 +40,8 @@
 
 * { box-sizing: border-box; }
 html, body, #root { height: 100%; margin: 0; }
+/* No pull-to-refresh / overscroll bounce: dragging the sheet must never reload the app */
+html { overscroll-behavior: none; }
 body {
   font: 16px/1.5 var(--font);
   color: var(--ink);
@@ -222,6 +224,15 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); ou
 .layer__head .icon-btn { width: 36px; height: 36px; }
 .layer__name { all: unset; flex: 1; min-width: 0; cursor: pointer; padding: 6px; border-radius: 8px; }
 .layer__name:focus-visible { outline: 3px solid var(--focus); }
+.layer__name, .title button { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+
+/* Inline rename with ✓ / ✕ */
+.rename { flex: 1; min-width: 0; display: flex; align-items: center; gap: 4px; }
+.rename input { flex: 1; min-width: 0; border: 0; border-bottom: 2px solid var(--accent); background: transparent; padding: 4px 2px; outline: none; font-weight: 700; }
+.rename__btn { flex: none; display: grid; place-items: center; width: 36px; height: 36px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); cursor: pointer; }
+.rename__ok { background: var(--accent); border-color: var(--accent); color: #fff; }
+.title-rename { margin: 2px 0; }
+.title-rename input { font-family: var(--display); font-weight: 400; font-size: 1.55rem; }
 .layer__title { display: flex; align-items: center; gap: 4px; font-weight: 700; }
 .layer__title .icon { color: var(--c); }
 .layer__meta { display: block; font-size: 0.8rem; color: var(--muted); }
@@ -359,7 +370,10 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); ou
   .sheet-peek { --sheet-h: 148px; }
   .sheet-half { --sheet-h: 52dvh; }
   .sheet-full { --sheet-h: calc(100dvh - 72px); }
-  .panel__grabber { display: grid; place-items: center; height: 22px; border: 0; background: transparent; flex: none; }
+  /* Bigger, gesture-owning drag handle: without touch-action the browser takes the gesture (scroll / refresh) */
+  .panel__grabber { display: grid; place-items: center; height: 26px; border: 0; background: transparent; flex: none; touch-action: none; }
+  .panel__head { touch-action: none; }
+  .title-rename input { font-size: 1.3rem; }
   .panel__grabber span { width: 44px; height: 5px; border-radius: 3px; background: var(--line); }
   .panel__head { padding-top: 0; }
   .title, .title-input { font-size: 1.3rem; }

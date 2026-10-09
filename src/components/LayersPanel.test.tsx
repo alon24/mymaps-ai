@@ -1,5 +1,5 @@
-import { beforeEach, describe, expect, it } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { act, fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { LayersPanel } from './LayersPanel'
 import { useMapStore } from '../store/mapStore'
@@ -61,5 +61,32 @@ describe('LayersPanel layout', () => {
     useMapStore.getState().load(useMapStore.getState().doc, { readOnly: true })
     render(<LayersPanel />)
     expect(document.querySelectorAll('.frow__grip')).toHaveLength(0)
+  })
+
+  it('long press on a layer name renames it; ✕ cancels, ✓ saves; a short tap does not rename', async () => {
+    vi.useFakeTimers()
+    try {
+      render(<LayersPanel />)
+      const name = () => screen.getByRole('button', { name: /אוכל/, expanded: true })
+      const press = (ms: number) => {
+        fireEvent.pointerDown(name(), { pointerType: 'touch', clientX: 10, clientY: 10 })
+        act(() => void vi.advanceTimersByTime(ms))
+      }
+      press(200)
+      fireEvent.pointerUp(name())
+      expect(screen.queryByLabelText('שם השכבה')).not.toBeInTheDocument()
+
+      press(600)
+      fireEvent.change(screen.getByLabelText('שם השכבה'), { target: { value: 'מסעדות' } })
+      fireEvent.click(screen.getByRole('button', { name: 'בטל שינוי שם' }))
+      expect(useMapStore.getState().doc.layers[0].name).toBe('אוכל')
+
+      press(600)
+      fireEvent.change(screen.getByLabelText('שם השכבה'), { target: { value: 'מסעדות' } })
+      fireEvent.click(screen.getByRole('button', { name: 'שמור שם' }))
+      expect(useMapStore.getState().doc.layers[0].name).toBe('מסעדות')
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

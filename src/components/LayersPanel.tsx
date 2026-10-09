@@ -7,7 +7,8 @@ import { PALETTE } from '../model/types'
 import { dayRouteUrls, stopsOf } from '../model/itinerary'
 import { formatDistance } from '../geo/measure'
 import { startSort } from '../lib/sortable'
-import { EmptyArt, Icon, IconButton, Swatches } from './ui'
+import { EmptyArt, Icon, IconButton, RenameField, Swatches } from './ui'
+import { useLongPress } from '../lib/longPress'
 import { featureColor } from './MapView'
 
 /** Show/hide layers. Viewers of shared maps can toggle too (not saved, no undo entry). */
@@ -78,6 +79,18 @@ export function RouteInfo({ layer }: { layer: Layer }) {
         ))}
       </div>
     </div>
+  )
+}
+
+/** Layer title: tap/click selects or folds the layer; long press renames it. */
+function LayerName({ layer, expanded, onToggle, onRename }: { layer: Layer; expanded: boolean; onToggle: () => void; onRename: () => void }) {
+  const press = useLongPress(onRename, { onClick: onToggle, onTap: onToggle })
+  return (
+    <button type="button" className="layer__name" {...press} aria-expanded={expanded} title="לחיצה ארוכה לשינוי שם">
+      <span className="layer__title">
+        {layer.day ? <Icon name="calendar" size={16} /> : ops.hasRoute(layer) ? <Icon name="route" size={16} /> : null} {layer.name}
+      </span>
+    </button>
   )
 }
 
@@ -163,6 +176,7 @@ export function LayersPanel() {
   const focusOn = useUi((s) => s.focusOn)
   const [filter, setFilter] = useState('')
   const [menuFor, setMenuFor] = useState<string | null>(null)
+  const [renaming, setRenaming] = useState<string | null>(null)
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
   const q = filter.trim().toLowerCase()
   const matches = (f: MapFeature) => !q || f.properties.name.toLowerCase().includes(q) || f.properties.description.toLowerCase().includes(q)
@@ -217,26 +231,32 @@ export function LayersPanel() {
                 label={layer.visible ? 'הסתר שכבה' : 'הצג שכבה'}
                 onClick={() => setVisible(layer.id, !layer.visible)}
               />
-              <button
-                type="button"
-                className="layer__name"
-                onClick={() => {
-                  if (!readOnly) setActiveLayer(layer.id)
-                  setCollapsed((c) => {
-                    const n = new Set(c)
-                    if (layer.id === activeLayerId || readOnly) {
-                      if (n.has(layer.id)) n.delete(layer.id)
-                      else n.add(layer.id)
-                    }
-                    return n
-                  })
-                }}
-                aria-expanded={!isCollapsed}
-              >
-                <span className="layer__title">
-                  {layer.day ? <Icon name="calendar" size={16} /> : ops.hasRoute(layer) ? <Icon name="route" size={16} /> : null} {layer.name}
-                </span>
-              </button>
+              {renaming === layer.id && !readOnly ? (
+                <RenameField
+                  className="layer__rename"
+                  label="שם השכבה"
+                  value={layer.name}
+                  onSave={(v) => apply((d) => ops.renameLayer(d, layer.id, v))}
+                  onDone={() => setRenaming(null)}
+                />
+              ) : (
+                <LayerName
+                  layer={layer}
+                  expanded={!isCollapsed}
+                  onRename={() => !readOnly && setRenaming(layer.id)}
+                  onToggle={() => {
+                    if (!readOnly) setActiveLayer(layer.id)
+                    setCollapsed((c) => {
+                      const n = new Set(c)
+                      if (layer.id === activeLayerId || readOnly) {
+                        if (n.has(layer.id)) n.delete(layer.id)
+                        else n.add(layer.id)
+                      }
+                      return n
+                    })
+                  }}
+                />
+              )}
               {!readOnly && <IconButton icon="more" label={`הגדרות שכבה ${layer.name}`} active={menuFor === layer.id} onClick={() => setMenuFor(menuFor === layer.id ? null : layer.id)} />}
             </header>
             {menuFor === layer.id && <LayerMenu layer={layer} index={i} count={doc.layers.length} onClose={() => setMenuFor(null)} />}

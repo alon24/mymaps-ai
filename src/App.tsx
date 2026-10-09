@@ -7,7 +7,8 @@ import { ItineraryPanel } from './components/ItineraryPanel'
 import { AiPanel } from './components/AiPanel'
 import { FeatureEditor } from './components/FeatureEditor'
 import { Dialogs } from './components/Dialogs'
-import { Icon, IconButton } from './components/ui'
+import { Icon, IconButton, RenameField } from './components/ui'
+import { useLongPress } from './lib/longPress'
 import { useMapStore } from './store/mapStore'
 import { useUi, type PanelTab } from './store/uiStore'
 import * as ops from './model/ops'
@@ -54,33 +55,26 @@ const SYNC_LABEL: Record<string, string> = {
   'view-only': 'צפייה בלבד',
 }
 
+/** Map title. Rename: long press (touch) or click (mouse/keyboard); a plain tap does nothing. */
 function Title() {
   const doc = useMapStore((s) => s.doc)
   const readOnly = useMapStore((s) => s.readOnly)
   const [editing, setEditing] = useState(false)
-  const [value, setValue] = useState(doc.title)
-  useEffect(() => {
-    setValue(doc.title)
-  }, [doc.title])
+  const press = useLongPress(() => !readOnly && setEditing(true), { onClick: () => !readOnly && setEditing(true) })
   if (editing && !readOnly) {
     return (
-      <input
-        className="title-input"
-        value={value}
-        autoFocus
-        aria-label="שם המפה"
-        onChange={(e) => setValue(e.target.value)}
-        onBlur={() => {
-          setEditing(false)
-          if (value.trim() && value !== doc.title) useMapStore.getState().apply((d) => ops.setTitle(d, value.trim()))
-        }}
-        onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
+      <RenameField
+        className="title-rename"
+        label="שם המפה"
+        value={doc.title}
+        onSave={(v) => useMapStore.getState().apply((d) => ops.setTitle(d, v))}
+        onDone={() => setEditing(false)}
       />
     )
   }
   return (
     <h1 className="title">
-      <button type="button" onClick={() => setEditing(true)} disabled={readOnly} title={readOnly ? undefined : 'שנה שם'}>
+      <button type="button" {...press} disabled={readOnly} title={readOnly ? undefined : 'לחיצה ארוכה לשינוי שם'}>
         {doc.title || 'מפה ללא שם'}
       </button>
     </h1>
@@ -212,51 +206,57 @@ let startupSynced = false
 
 const SNAPS = ['peek', 'half', 'full'] as const
 
-/** Phone bottom-sheet handle: drag to resize (snaps by position and flick velocity), tap to cycle. */
+/**
+ * Phone bottom sheet: drag to resize (snaps by position and flick velocity).
+ * Started from the grabber or from the panel header; `onTap` runs when the finger didn't move.
+ */
+function startSheetDrag(e: React.PointerEvent, onTap?: () => void) {
+  const panel = (e.currentTarget as HTMLElement).closest<HTMLElement>('.panel')
+  if (!panel || window.innerWidth >= 900 || e.pointerType === 'mouse' && e.button !== 0) return
+  const startY = e.clientY
+  const startH = panel.getBoundingClientRect().height
+  let lastY = startY
+  let lastT = performance.now()
+  let v = 0
+  let moved = false
+  const move = (ev: PointerEvent) => {
+    const now = performance.now()
+    v = (ev.clientY - lastY) / Math.max(1, now - lastT)
+    lastY = ev.clientY
+    lastT = now
+    if (!moved && Math.abs(ev.clientY - startY) <= 10) return // small jitter is still a tap / long press
+    if (!moved) panel.classList.add('is-dragging')
+    moved = true
+    const h = Math.max(120, Math.min(window.innerHeight - 64, startH - (ev.clientY - startY)))
+    panel.style.setProperty('--sheet-h', `${h}px`)
+  }
+  const up = () => {
+    window.removeEventListener('pointermove', move)
+    window.removeEventListener('pointerup', up)
+    window.removeEventListener('pointercancel', up)
+    panel.classList.remove('is-dragging')
+    panel.style.removeProperty('--sheet-h')
+    if (!moved) return onTap?.()
+    const h = startH - (lastY - startY)
+    const heights = { peek: 148, half: window.innerHeight * 0.52, full: window.innerHeight - 72 }
+    let target = SNAPS.reduce((best, s) => (Math.abs(heights[s] - h) < Math.abs(heights[best] - h) ? s : best), 'half' as (typeof SNAPS)[number])
+    // a flick wins over position
+    if (v < -0.6) target = h > heights.half ? 'full' : 'half'
+    if (v > 0.6) target = h < heights.half ? 'peek' : 'half'
+    useUi.getState().setSheet(target)
+  }
+  window.addEventListener('pointermove', move)
+  window.addEventListener('pointerup', up)
+  window.addEventListener('pointercancel', up)
+}
+
 function SheetGrabber({ onTap }: { onTap: () => void }) {
   return (
     <button
       type="button"
       className="panel__grabber"
       aria-label="הגדל או הקטן את הפאנל"
-      onPointerDown={(e) => {
-        const panel = (e.currentTarget as HTMLElement).closest<HTMLElement>('.panel')
-        if (!panel || window.innerWidth >= 900) return
-        const startY = e.clientY
-        const startH = panel.getBoundingClientRect().height
-        let lastY = startY
-        let lastT = performance.now()
-        let v = 0
-        let moved = false
-        panel.classList.add('is-dragging')
-        const move = (ev: PointerEvent) => {
-          const now = performance.now()
-          v = (ev.clientY - lastY) / Math.max(1, now - lastT)
-          lastY = ev.clientY
-          lastT = now
-          if (Math.abs(ev.clientY - startY) > 6) moved = true
-          const h = Math.max(120, Math.min(window.innerHeight - 64, startH - (ev.clientY - startY)))
-          panel.style.setProperty('--sheet-h', `${h}px`)
-        }
-        const up = () => {
-          window.removeEventListener('pointermove', move)
-          window.removeEventListener('pointerup', up)
-          window.removeEventListener('pointercancel', up)
-          panel.classList.remove('is-dragging')
-          panel.style.removeProperty('--sheet-h')
-          if (!moved) return onTap()
-          const h = startH - (lastY - startY)
-          const heights = { peek: 148, half: window.innerHeight * 0.52, full: window.innerHeight - 72 }
-          let target = SNAPS.reduce((best, s) => (Math.abs(heights[s] - h) < Math.abs(heights[best] - h) ? s : best), 'half' as (typeof SNAPS)[number])
-          // a flick wins over position
-          if (v < -0.6) target = h > heights.half ? 'full' : 'half'
-          if (v > 0.6) target = h < heights.half ? 'peek' : 'half'
-          useUi.getState().setSheet(target)
-        }
-        window.addEventListener('pointermove', move)
-        window.addEventListener('pointerup', up)
-        window.addEventListener('pointercancel', up)
-      }}
+      onPointerDown={(e) => startSheetDrag(e, onTap)}
       onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), onTap())}
     >
       <span />
@@ -336,7 +336,15 @@ export default function App() {
 
       <aside className="panel" aria-label="פאנל המפה">
         <SheetGrabber onTap={cycleSheet} />
-        <header className="panel__head">
+        <header
+          className="panel__head"
+          onPointerDown={(e) => {
+            // The whole header drags the sheet, except its buttons (the title still drags; it renames on long press)
+            const t = e.target as HTMLElement
+            if (t.closest('input, .menu, .icon-btn, .btn, .sync, .rename')) return
+            startSheetDrag(e)
+          }}
+        >
           <div className="panel__title">
             <Title />
             <SyncBadge />
