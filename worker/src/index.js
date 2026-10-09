@@ -35,11 +35,17 @@ async function tokenMatches(given, expected) {
  * Google sign-in as an alternative to APP_TOKEN: the app sends the user's Google access token
  * (Authorization: Bearer ...). It is accepted only if Google says it was issued to our OAuth
  * client (GOOGLE_CLIENT_ID). While the OAuth app is in "Testing", Google only issues tokens to
- * the listed test users. ALLOWED_EMAILS (comma separated) optionally narrows it further.
+ * the listed test users. ALLOWED_EMAILS (comma separated) optionally narrows it further; each entry
+ * is an address or `sha256:<hex of the lowercased address>` (keeps addresses out of the public repo).
  * Results are cached per token for a few minutes to avoid a Google round trip per request.
  */
 const authCache = new Map()
 const AUTH_TTL = 5 * 60_000
+
+async function sha256Hex(text) {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text))
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('')
+}
 
 async function googleUserAllowed(token, env) {
   if (!token || !env.GOOGLE_CLIENT_ID) return false
@@ -61,8 +67,8 @@ async function googleUserAllowed(token, env) {
       const about = await fetch('https://www.googleapis.com/drive/v3/about?fields=user(emailAddress)', {
         headers: { Authorization: `Bearer ${token}` },
       })
-      const email = about.ok ? String((await about.json())?.user?.emailAddress || '').toLowerCase() : ''
-      ok = allowed.includes(email)
+      const email = about.ok ? String((await about.json())?.user?.emailAddress || '').trim().toLowerCase() : ''
+      ok = Boolean(email) && (allowed.includes(email) || allowed.includes(`sha256:${await sha256Hex(email)}`))
     }
   }
   if (authCache.size > 1000) authCache.clear()

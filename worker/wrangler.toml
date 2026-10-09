@@ -7,11 +7,16 @@ compatibility_date = "2026-08-15"
 #
 # Google sign-in auth: GOOGLE_CLIENT_ID is passed at deploy time by CI
 # (`--var GOOGLE_CLIENT_ID:...` from the VITE_GOOGLE_CLIENT_ID GitHub variable).
-# Optional ALLOWED_EMAILS (comma separated) can be set in the Cloudflare dashboard.
-# keep_vars stops deploys from wiping variables set in the dashboard.
+# keep_vars stops deploys from wiping other variables set in the dashboard.
 keep_vars = true
 
 # MODEL overrides DEFAULT_MODEL in src/index.js. Remove this block to fall back
 # to the default (qwen/qwen3.5-plus-20260420).
 [vars]
 MODEL = "openai/gpt-4o-mini"
+
+# Who may use the AI with Google sign-in. Comma separated; each entry is an address or
+# sha256:<hex of the lowercased address> (hashes keep addresses out of this public repo).
+# Add someone: printf '%s' 'friend@gmail.com' | sha256sum   → append  ,sha256:<hash>
+# Empty = any Google user of this app (while in Testing: only the OAuth test users).
+ALLOWED_EMAILS = "sha256:bb92649b6d5241648bc0d2cba48ea79ea61f022fef80dc20ab6e0d1e0b7d038d"

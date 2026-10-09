@@ -210,6 +210,17 @@ describe('Google sign-in auth', () => {
     expect((await worker.fetch(aiCall(), { ...genv, ALLOWED_EMAILS: 'ilan@example.com' })).status).toBe(401)
   })
 
+  it('matches hashed entries (sha256 of the lowercased address)', async () => {
+    const hash = [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode('ilan@example.com')))]
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join('')
+    google({ email: 'ILAN@example.com' })
+    expect((await worker.fetch(aiCall(), { ...genv, ALLOWED_EMAILS: `sha256:${hash}` })).status).toBe(200)
+    vi.restoreAllMocks()
+    google({ email: 'other@example.com' })
+    expect((await worker.fetch(aiCall(), { ...genv, ALLOWED_EMAILS: `sha256:${hash}` })).status).toBe(401)
+  })
+
   it('checks a token with Google once, then uses the cache', async () => {
     const f = google()
     const headers = { 'Content-Type': 'application/json', Authorization: 'Bearer cached-token' }

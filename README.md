@@ -28,7 +28,7 @@
    - `APP_TOKEN` — סיסמה ארוכה שאתה ממציא
 5. משתמשים לא צריכים להזין שום מפתח: מי שמחובר עם Google משתמש ב-AI על חשבון ה-OpenRouter שלך. ה-Worker מוודא מול Google שההתחברות שייכת לאפליקציה הזו (דורש את חלק 2 — Google Drive).
    - כל עוד אפליקציית ה-OAuth במצב Testing, רק מי שברשימת Test users יכול להתחבר.
-   - כדי להגביל לאנשים מסוימים גם אחרי פרסום: ב-Cloudflare → ה-Worker → Settings → Variables → משתנה `ALLOWED_EMAILS` (מיילים מופרדים בפסיק).
+   - רק מיילים ברשימת `ALLOWED_EMAILS` ב-`worker/wrangler.toml` יכולים להשתמש ב-AI (שמורים כ-hash כדי שהכתובות לא יופיעו בריפו הציבורי). להוספת אדם: `printf '%s' 'friend@gmail.com' | sha256sum` והוסף `,sha256:<hash>` לרשימה.
    - `APP_TOKEN` נשאר כמפתח מנהל (אופציונלי): תפריט → הגדרות.
    - מומלץ להגדיר תקרת הוצאה ב-OpenRouter.
 
