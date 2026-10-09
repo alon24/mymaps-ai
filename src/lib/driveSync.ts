@@ -259,4 +259,38 @@ export async function refreshCurrentFromDrive(): Promise<void> {
   await openDriveMap(doc.driveFileId)
 }
 
+/**
+ * Delete a map that lives in Drive: move the file to the Drive trash and remove the local copy.
+ * If it was open, switch to another map. The toast offers undo.
+ */
+export async function deleteDriveMap(fileId: string, name: string, onRestored?: () => void): Promise<boolean> {
+  const ui = useUi.getState()
+  const c = await ctx()
+  try {
+    await drive.setTrashed(c, fileId, true)
+  } catch (e) {
+    ui.showToast(e instanceof Error ? e.message : 'המחיקה נכשלה', { tone: 'error' })
+    return false
+  }
+  const local = await storage.findByDriveId(fileId)
+  if (local) await storage.deleteMap(local.id)
+  if (useMapStore.getState().doc.driveFileId === fileId) {
+    const next = (await storage.listMaps())[0]
+    await openLocal(next?.id ?? null)
+  }
+  ui.showToast(`"${name}" נמחקה (בסל של Drive)`, {
+    action: {
+      label: 'בטל',
+      run: () =>
+        void (async () => {
+          await drive.setTrashed(await ctx(), fileId, false)
+          if (local) await storage.saveMap(local)
+          onRestored?.()
+          useUi.getState().showToast('המפה שוחזרה')
+        })().catch(() => useUi.getState().showToast('השחזור נכשל. אפשר לשחזר מהסל ב-Drive.', { tone: 'error' })),
+    },
+  })
+  return true
+}
+
 export { wasSignedIn }

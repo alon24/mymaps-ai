@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { MapView } from './components/MapView'
 import { Toolbar } from './components/Toolbar'
 import { LayersPanel } from './components/LayersPanel'
@@ -152,15 +153,21 @@ function SyncBadge() {
   )
 }
 
+/**
+ * While a modal <dialog> is open, everything outside it is inert (visible but not clickable),
+ * so the toast is rendered inside the open dialog; otherwise at the app root.
+ */
 function Toast() {
   const toast = useUi((s) => s.toast)
+  const dialog = useUi((s) => s.dialog)
   useEffect(() => {
     if (!toast) return
     const t = setTimeout(() => useUi.getState().dismissToast(), toast.action ? 6000 : 3500)
     return () => clearTimeout(t)
   }, [toast])
   if (!toast) return null
-  return (
+  const host = dialog ? document.querySelector<HTMLDialogElement>('dialog[open]') : null
+  const node = (
     <div className={`toast ${toast.tone === 'error' ? 'toast--error' : ''}`} role="status" key={toast.id}>
       <span>{toast.text}</span>
       {toast.action && (
@@ -176,6 +183,7 @@ function Toast() {
       )}
     </div>
   )
+  return host ? createPortal(node, host) : node
 }
 
 /** Shown when a shared link needs sign-in or a Picker grant. */

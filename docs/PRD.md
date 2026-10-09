@@ -110,7 +110,7 @@ Priority: **P0** = v1 must, **P1** = v1 should, **P2** = later.
 - P0 Sign-in survives a reload until the Google access token expires (~1 hour; drive.file only). After that, one click on the sync badge or "Sign in" reconnects — no popup ever opens without a click.
 - P0 On startup while signed in, the open Drive map is refreshed from Drive (picks up edits made on another device).
 - P0 Save map to Drive (`<title>.mymap.json` in a "MyMaps AI" folder); autosave to Drive after edits (debounced).
-- P0 List and open the user's Drive maps.
+- P0 List and open the user's Drive maps. Delete a map the user owns: moves the Drive file to the Drive trash (recoverable 30 days), removes the local copy, switches away if it was open; the toast offers Undo.
 - P0 Conflict detection: before writing, compare the Drive content revision (`headRevisionId`; `version` only as fallback, since it also changes on metadata/indexing) with the last synced one; saves run strictly one at a time; on conflict ask: keep mine / load theirs / save mine as a copy.
 - P0 Share:
   - view link: "anyone with the link can view" → app URL `#/m/<fileId>` opens read-only without sign-in;

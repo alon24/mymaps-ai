@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { ConflictError, decideSync, loadMap, saveMap, serialize, setLinkSharing, shareUrl, shareWith } from './drive'
+import { ConflictError, decideSync, loadMap, saveMap, serialize, setLinkSharing, setTrashed, shareUrl, shareWith } from './drive'
 import { createMap } from '../model/ops'
 
 type Call = { url: URL; init: RequestInit }
@@ -128,5 +128,14 @@ describe('sharing', () => {
 
   it('builds app share links', () => {
     expect(shareUrl('https://a.io/app/', 'ID')).toBe('https://a.io/app/#/m/ID')
+  })
+})
+
+describe('setTrashed', () => {
+  it('moves a file to the trash and back with a metadata PATCH', async () => {
+    const { fetch, calls } = fakeDrive({ 'PATCH /drive/v3/files/F': () => ({ id: 'F' }) })
+    await setTrashed({ token: 'T', fetch }, 'F', true)
+    await setTrashed({ token: 'T', fetch }, 'F', false)
+    expect(calls.map((c) => JSON.parse(String(c.init.body)))).toEqual([{ trashed: true }, { trashed: false }])
   })
 })

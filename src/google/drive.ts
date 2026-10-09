@@ -255,6 +255,15 @@ export async function listPermissions(ctx: DriveCtx, fileId: string): Promise<Pe
   return ((await res.json()) as { permissions: Permission[] }).permissions
 }
 
+/** Move a file to the Drive trash (recoverable for 30 days), or restore it. Owner only. */
+export async function setTrashed(ctx: DriveCtx, fileId: string, trashed: boolean): Promise<void> {
+  await driveFetch(ctx, `${API}/files/${encodeURIComponent(fileId)}?supportsAllDrives=true`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ trashed }),
+  })
+}
+
 /** Anyone with the link can view (needed for sign-in-free view links). */
 export async function setLinkSharing(ctx: DriveCtx, fileId: string, on: boolean): Promise<void> {
   if (on) {

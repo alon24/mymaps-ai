@@ -14,7 +14,7 @@ import { appBase } from '../lib/appBase'
 import { driveEnabled } from '../env'
 import * as drive from '../google/drive'
 import { getToken, isSignedIn, onAuthChange, signOut } from '../google/auth'
-import { openDriveMap, openLocal, resolveConflict, saveToDrive, signIn, uploadLocalMaps } from '../lib/driveSync'
+import { deleteDriveMap, openDriveMap, openLocal, resolveConflict, saveToDrive, signIn, uploadLocalMaps } from '../lib/driveSync'
 import type { Layer } from '../model/types'
 import { Dialog, Icon } from './ui'
 
@@ -57,6 +57,8 @@ const when = (iso: string) => {
 }
 
 // ---------------- Maps ----------------
+const title = (f: drive.DriveFileMeta) => f.name.replace(/\.mymap\.json$/, '') || 'ללא שם'
+
 function MapsDialog() {
   const currentId = useMapStore((s) => s.doc.id)
   const currentDriveId = useMapStore((s) => s.doc.driveFileId)
@@ -173,13 +175,37 @@ function MapsDialog() {
                         if (r === 'ok') close()
                       }}
                     >
-                      <strong>{f.name.replace(/\.mymap\.json$/, '')}</strong>
+                      <strong>{title(f)}</strong>
                       <span>
                         {here ? `${here.count} פריטים · ` : ''}
                         {when(f.modifiedTime)}
                         {f.ownedByMe === false ? ' · שותפה איתך' : ''}
                       </span>
                     </button>
+                    {f.ownedByMe !== false && (
+                      <button
+                        type="button"
+                        className="icon-btn"
+                        aria-label={`מחק את ${title(f)}`}
+                        title="מחק (יועבר לסל של Drive)"
+                        disabled={busy}
+                        onClick={async () => {
+                          if (!confirm(`למחוק את "${title(f)}"?\nהמפה תועבר לסל של Google Drive, ואפשר לשחזר אותה משם במשך 30 יום.`)) return
+                          setBusy(true)
+                          const ok = await deleteDriveMap(f.id, title(f), () => {
+                            void refresh()
+                            void refreshRemote()
+                          })
+                          setBusy(false)
+                          if (ok) {
+                            setRemote((r) => r?.filter((x) => x.id !== f.id) ?? r)
+                            void refresh()
+                          }
+                        }}
+                      >
+                        <Icon name="trash" size={18} />
+                      </button>
+                    )}
                   </li>
                 )
               })}

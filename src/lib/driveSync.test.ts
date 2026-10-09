@@ -12,8 +12,10 @@ vi.mock('../google/auth', () => ({
   pickFile: async () => null,
 }))
 const uploads = vi.hoisted(() => [] as string[])
+const trash = vi.hoisted(() => [] as [string, boolean][])
 vi.mock('../google/drive', async (orig) => ({
   ...(await orig<typeof import('../google/drive')>()),
+  setTrashed: async (_c: unknown, id: string, on: boolean) => void trash.push([id, on]),
   saveMap: async (_c: unknown, doc: { title: string }) => {
     uploads.push(doc.title)
     return { fileId: `F-${doc.title}`, version: 'r:1' }
@@ -23,7 +25,8 @@ vi.mock('../google/drive', async (orig) => ({
 import * as storage from './storage'
 import * as ops from '../model/ops'
 import { useMapStore } from '../store/mapStore'
-import { uploadLocalMaps } from './driveSync'
+import { deleteDriveMap, uploadLocalMaps } from './driveSync'
+import { useUi } from '../store/uiStore'
 
 const withPoint = (title: string) => {
   const d = ops.createMap(title)
@@ -57,5 +60,23 @@ describe('uploadLocalMaps', () => {
     expect(await uploadLocalMaps()).toBe(0)
     expect(uploads).toEqual([])
     auth.signed = true
+  })
+})
+
+describe('deleteDriveMap', () => {
+  it('trashes the Drive file, removes the local copy, switches away if open, and undo restores both', async () => {
+    trash.length = 0
+    const d = { ...withPoint('למחיקה'), driveFileId: 'DEL', driveVersion: 'r:1' }
+    await storage.saveMap(d)
+    useMapStore.getState().load(d)
+
+    expect(await deleteDriveMap('DEL', 'למחיקה')).toBe(true)
+    expect(trash).toEqual([['DEL', true]])
+    expect(await storage.findByDriveId('DEL')).toBeUndefined()
+    expect(useMapStore.getState().doc.driveFileId).not.toBe('DEL')
+
+    useUi.getState().toast!.action!.run()
+    await vi.waitFor(() => expect(trash).toEqual([['DEL', true], ['DEL', false]]))
+    await vi.waitFor(async () => expect((await storage.findByDriveId('DEL'))?.title).toBe('למחיקה'))
   })
 })
