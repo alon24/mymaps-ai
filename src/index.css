@@ -215,27 +215,32 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); ou
 .layers__tools { position: sticky; top: 0; z-index: 2; display: flex; gap: 8px; padding: 2px 0 10px; background: var(--panel); }
 .search-field { flex: 1; display: flex; align-items: center; gap: 6px; padding: 0 10px; border: 1px solid var(--line); border-radius: 10px; color: var(--muted); }
 .search-field input { border: 0 !important; padding: 0 !important; outline: none !important; min-height: 38px !important; background: transparent !important; }
-.layer { border-radius: var(--radius); margin-bottom: 8px; border: 1px solid var(--line); background: var(--panel); }
+.layer { border-radius: 10px; margin-bottom: 6px; border: 1px solid var(--line); background: var(--panel); }
 .layer.is-active { border-color: var(--c); box-shadow: inset 4px 0 0 var(--c); }
 [dir='rtl'] .layer.is-active { box-shadow: inset -4px 0 0 var(--c); }
-.layer__head { display: flex; align-items: center; gap: 2px; padding: 4px; }
-.layer__name { all: unset; flex: 1; min-width: 0; cursor: pointer; padding: 4px 6px; border-radius: 8px; }
+.layer__head { display: flex; align-items: center; gap: 0; padding: 2px; }
+.layer__head .icon-btn { width: 36px; height: 36px; }
+.layer__name { all: unset; flex: 1; min-width: 0; cursor: pointer; padding: 6px; border-radius: 8px; }
 .layer__name:focus-visible { outline: 3px solid var(--focus); }
 .layer__title { display: flex; align-items: center; gap: 4px; font-weight: 700; }
 .layer__title .icon { color: var(--c); }
 .layer__meta { display: block; font-size: 0.8rem; color: var(--muted); }
 .layer-menu { padding: 4px 12px 12px; border-top: 1px dashed var(--line); background: var(--raise); }
 
-.frows { list-style: none; margin: 0; padding: 0 4px 6px; min-height: 8px; }
-.frows__empty { color: var(--muted); font-size: 0.85rem; padding: 8px 10px; border: 1px dashed var(--line); border-radius: 8px; margin: 4px; }
+.frows { list-style: none; margin: 0; padding: 0 2px 4px; min-height: 8px; }
+.frows__empty { color: var(--muted); font-size: 0.82rem; padding: 6px 10px; border: 1px dashed var(--line); border-radius: 8px; margin: 2px 4px 4px; }
 .frow { display: flex; align-items: center; border-radius: 9px; }
 .frow:hover { background: var(--raise); }
 .frow.is-selected { background: color-mix(in srgb, var(--mark) 35%, transparent); }
 .frow.is-highlight { box-shadow: inset 0 0 0 2px var(--mark); }
-.frow__grip { display: grid; place-items: center; width: 28px; height: 40px; color: var(--muted); cursor: grab; touch-action: none; flex: none; }
-.frow__main { all: unset; flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; padding: 6px 8px; min-height: 28px; cursor: pointer; border-radius: 8px; }
+.frow__grip { display: grid; place-items: center; width: 30px; align-self: stretch; min-height: 36px; color: var(--ink-2); cursor: grab; touch-action: none; flex: none; border-radius: 8px; }
+.frow__grip .icon { stroke-width: 3.2; }
+.frow__grip:hover { background: var(--raise); color: var(--ink); }
+.frow__grip:active { cursor: grabbing; }
+.frow__main { all: unset; flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; padding: 4px 6px; min-height: 28px; cursor: pointer; border-radius: 8px; }
+.frow__pos { flex: none; min-width: 1.6em; text-align: center; font-size: 0.8rem; font-weight: 700; color: var(--muted); font-variant-numeric: tabular-nums; }
 .frow__main:focus-visible { outline: 3px solid var(--focus); }
-.frow__mark { flex: none; width: 24px; height: 24px; border-radius: 50%; background: var(--c); color: #fff; display: grid; place-items: center; font-size: 12px; font-weight: 700; }
+.frow__mark { flex: none; width: 20px; height: 20px; border-radius: 50%; background: var(--c); color: #fff; display: grid; place-items: center; font-size: 11px; }
 .frow__mark--LineString { border-radius: 3px; height: 6px; }
 .frow__mark--Polygon { border-radius: 5px; opacity: 0.85; }
 .frow__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -441,3 +446,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); ou
 .welcome .icon { display: inline-block; vertical-align: -3px; }
 .empty-art { width: 150px; height: auto; margin-bottom: 6px; }
 .empty-art__pin { transform-origin: 118px 48px; animation: pin-drop 420ms 120ms cubic-bezier(.2, 1.4, .4, 1) both; }
+
+/* new item flashes in its layer instead of opening the editor */
+@keyframes row-flash { 0%, 40% { background: color-mix(in srgb, var(--mark) 55%, transparent); } 100% { background: transparent; } }
+.frow.is-new { animation: row-flash 1.6s ease-out both; }

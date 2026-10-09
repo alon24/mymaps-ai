@@ -22,6 +22,8 @@ interface UiState {
   /** Fly-to request; `n` changes on every request so repeated requests still fire */
   focus: { featureId?: string; layerId?: string; all?: boolean; point?: [number, number]; n: number } | null
   highlights: string[]
+  /** Feature just added from the map: its row flashes in the list (not opened for editing) */
+  justAdded: string | null
   searchPin: Place | null
   userLocation: [number, number] | null
   /** GPS accuracy radius, meters */
@@ -40,6 +42,7 @@ interface UiState {
   dismissToast: () => void
   focusOn: (target: Omit<NonNullable<UiState['focus']>, 'n'>) => void
   setHighlights: (ids: string[]) => void
+  setJustAdded: (id: string | null) => void
   setSearchPin: (p: Place | null) => void
   setUserLocation: (p: [number, number] | null, accuracy?: number) => void
   setTracking: (on: boolean) => void
@@ -57,6 +60,7 @@ export const useUi = create<UiState>((set) => ({
   toast: null,
   focus: null,
   highlights: [],
+  justAdded: null,
   searchPin: null,
   userLocation: null,
   userAccuracy: 0,
@@ -80,6 +84,7 @@ export const useUi = create<UiState>((set) => ({
   dismissToast: () => set({ toast: null }),
   focusOn: (target) => set((s) => ({ focus: { ...target, n: (s.focus?.n ?? 0) + 1 } })),
   setHighlights: (highlights) => set({ highlights }),
+  setJustAdded: (justAdded) => set({ justAdded }),
   setSearchPin: (searchPin) => set({ searchPin }),
   setUserLocation: (userLocation, userAccuracy = 0) => set({ userLocation, userAccuracy }),
   setTracking: (tracking) => set({ tracking }),

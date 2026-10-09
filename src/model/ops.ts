@@ -141,6 +141,14 @@ export function moveFeatureToLayer(doc: MapDoc, featureId: string, toLayerId: st
   return addFeature(removeFeature(doc, featureId), toLayerId, found.feature)
 }
 
+const TYPE_NAMES = { Point: 'נקודה', LineString: 'קו', Polygon: 'אזור' } as const
+
+/** Default name for a new feature: "נקודה 3" = third point in that layer. */
+export function defaultName(layer: Layer | undefined, type: MapGeometry['type']): string {
+  const n = (layer?.features.filter((f) => f.geometry.type === type).length ?? 0) + 1
+  return `${TYPE_NAMES[type]} ${n}`
+}
+
 export const featureCount = (doc: MapDoc): number =>
   doc.layers.reduce((n, l) => n + l.features.length, 0)
 

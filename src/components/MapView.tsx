@@ -148,13 +148,8 @@ export function MapView() {
     map.on('pm:create', (e: { layer: L.Layer }) => {
       const geometry = geometryFromLayer(e.layer)
       map.removeLayer(e.layer)
-      const st = useMapStore.getState()
-      st.setTool('select')
-      if (!geometry) return
-      const layer = st.doc.layers.find((l) => l.id === st.activeLayerId)
-      const f = ops.createFeature(geometry, { color: layer?.color })
-      st.apply((d) => ops.addFeature(d, st.activeLayerId, f))
-      st.select(f.properties.id)
+      useMapStore.getState().setTool('select')
+      if (geometry) addFeatureToActiveLayer(geometry)
     })
 
     map.on('locationfound', (e: L.LocationEvent) => {
@@ -173,19 +168,9 @@ export function MapView() {
   }, [])
 
   function addPointAt(latlng: L.LatLng) {
-    const st = useMapStore.getState()
-    if (st.readOnly) return
-    let layerId = st.activeLayerId
-    if (!layerId) {
-      const l = ops.createLayer('שכבה ללא שם')
-      st.apply((d) => ops.addLayer(d, l))
-      layerId = l.id
-    }
-    const layer = useMapStore.getState().doc.layers.find((l) => l.id === layerId)
-    const f = ops.createFeature({ type: 'Point', coordinates: [Number(latlng.lng.toFixed(7)), Number(latlng.lat.toFixed(7))] }, { color: layer?.color })
-    st.apply((d) => ops.addFeature(d, layerId, f))
-    st.select(f.properties.id)
-    st.setTool('select')
+    if (useMapStore.getState().readOnly) return
+    addFeatureToActiveLayer({ type: 'Point', coordinates: [Number(latlng.lng.toFixed(7)), Number(latlng.lat.toFixed(7))] })
+    useMapStore.getState().setTool('select')
   }
 
   function drawMeasure() {
@@ -335,12 +320,7 @@ export function MapView() {
         btn.className = 'btn btn--primary'
         btn.textContent = 'הוסף למפה'
         btn.onclick = () => {
-          const st = useMapStore.getState()
-          const layer = st.doc.layers.find((l) => l.id === st.activeLayerId)
-          if (!layer) return
-          const f = ops.createFeature({ type: 'Point', coordinates: [searchPin.lng, searchPin.lat] }, { name: searchPin.name, description: searchPin.label, color: layer.color })
-          st.apply((d) => ops.addFeature(d, layer.id, f))
-          st.select(f.properties.id)
+          addFeatureToActiveLayer({ type: 'Point', coordinates: [searchPin.lng, searchPin.lat] }, { name: searchPin.name, description: searchPin.label })
           useUi.getState().setSearchPin(null)
         }
         box.appendChild(btn)
@@ -410,6 +390,29 @@ export function MapView() {
       {tool === 'point' && <div className="map-hint" role="status">הקש על המפה כדי להוסיף נקודה.</div>}
     </div>
   )
+}
+
+/**
+ * Add a feature to the active layer (creating a layer if there is none) without opening the editor:
+ * it gets a default name, its row flashes in the list, and a toast offers to edit it.
+ */
+export function addFeatureToActiveLayer(geometry: MapGeometry, props: { name?: string; description?: string } = {}): string {
+  const st = useMapStore.getState()
+  let layerId = st.activeLayerId
+  if (!st.doc.layers.some((l) => l.id === layerId)) {
+    const l = ops.createLayer('שכבה ללא שם')
+    st.apply((d) => ops.addLayer(d, l))
+    layerId = l.id
+  }
+  const layer = useMapStore.getState().doc.layers.find((l) => l.id === layerId)
+  const f = ops.createFeature(geometry, { color: layer?.color, name: props.name ?? ops.defaultName(layer, geometry.type), description: props.description })
+  useMapStore.getState().apply((d) => ops.addFeature(d, layerId, f))
+  const ui = useUi.getState()
+  ui.setJustAdded(f.properties.id)
+  ui.showToast(`"${f.properties.name}" נוסף לשכבה "${layer?.name ?? ''}"`, {
+    action: { label: 'ערוך', run: () => useMapStore.getState().select(f.properties.id) },
+  })
+  return f.properties.id
 }
 
 /* Geoman exposes these on the draw handlers; they're stable across 2.x. */

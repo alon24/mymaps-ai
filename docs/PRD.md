@@ -70,7 +70,8 @@ Priority: **P0** = v1 must, **P1** = v1 should, **P2** = later.
 - P0 Edit: name, description (multi-line, links clickable), color (palette), icon (emoji set) for points.
 - P0 Move points by dragging; edit line/polygon vertices.
 - P0 Delete with undo.
-- P0 Feature list per layer with text filter; tap → select and fly to it.
+- P0 Feature list per layer with text filter; tap → select and fly to it. Each row shows its position in the layer (1, 2, 3…) and an always-visible drag handle. Layer cards are compact (no item counts).
+- P0 Adding from the map does not open the editor: the item gets a default name ("נקודה 3"), flashes in its layer, and a toast offers *Edit*.
 - P0 Show measurements: line length, polygon area and perimeter.
 - P0 **Reorder by drag** within a layer (works with touch), and drag to another layer.
 - P1 Add point at current location in one tap.

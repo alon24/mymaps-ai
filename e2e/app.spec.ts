@@ -13,6 +13,10 @@ async function addPoint(page: Page, name: string, x: number, y: number) {
   const map = page.locator('.map')
   const box = (await map.boundingBox())!
   await page.mouse.click(box.x + box.width * x, box.y + Math.min(box.height * y, 300))
+  // New items are added closed: they flash in their layer instead of opening the editor
+  await expect(page.getByLabel('שם', { exact: true })).toHaveCount(0)
+  await expect(page.locator('.frow.is-new')).toHaveCount(1)
+  await page.locator('.toast').getByRole('button', { name: 'ערוך' }).click()
   const field = page.getByLabel('שם', { exact: true })
   await field.fill(name)
   await field.press('Enter')

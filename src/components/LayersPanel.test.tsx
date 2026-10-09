@@ -28,9 +28,9 @@ describe('LayersPanel', () => {
     await userEvent.click(screen.getByRole('button', { name: 'הגדרות שכבה אוכל' }))
     await userEvent.click(screen.getByRole('button', { name: 'מספרים לפי הסדר' }))
     expect(useMapStore.getState().doc.layers[0].style).toBe('numbered')
-    // numbered rows show 1, 2
-    const marks = document.querySelectorAll('[data-sort-list] .frow__mark')
-    expect([...marks].slice(0, 2).map((m) => m.textContent)).toEqual(['1', '2'])
+    // every row shows its position in the layer
+    const positions = document.querySelectorAll('ul[data-sort-list] .frow__pos')
+    expect([...positions].map((m) => m.textContent)).toEqual(['1', '2', '1'])
   })
 
   it('hides a layer and selects a feature on click', async () => {
@@ -39,5 +39,27 @@ describe('LayersPanel', () => {
     expect(useMapStore.getState().doc.layers[1].visible).toBe(false)
     await userEvent.click(screen.getByText('פלאפל'))
     expect(useMapStore.getState().selectedFeatureId).toBe(useMapStore.getState().doc.layers[0].features[0].properties.id)
+  })
+})
+
+describe('LayersPanel layout', () => {
+  beforeEach(() => {
+    const m = ops.createMap('t')
+    m.layers = [ops.createLayer('אוכל', [pt('פלאפל'), pt('חומוס')]), ops.createLayer('לינה', [pt('מלון')])]
+    useMapStore.getState().load(m)
+  })
+
+  it('always shows drag handles, no item counts, and accepts drops on layer headers', () => {
+    render(<LayersPanel />)
+    expect(document.querySelectorAll('.frow__grip')).toHaveLength(3)
+    expect(screen.queryByText(/פריטים/)).not.toBeInTheDocument()
+    const ids = useMapStore.getState().doc.layers.map((l) => l.id)
+    expect([...document.querySelectorAll('header[data-sort-list]')].map((h) => h.getAttribute('data-sort-list'))).toEqual(ids)
+  })
+
+  it('hides drag handles for view-only maps', () => {
+    useMapStore.getState().load(useMapStore.getState().doc, { readOnly: true })
+    render(<LayersPanel />)
+    expect(document.querySelectorAll('.frow__grip')).toHaveLength(0)
   })
 })

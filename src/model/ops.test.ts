@@ -84,3 +84,13 @@ describe('ordering and layer settings', () => {
     expect(names(copy.layers[0])).toEqual(['a', 'b', 'c'])
   })
 })
+
+describe('defaultName', () => {
+  it('numbers new features per type within the layer', () => {
+    const l = ops.createLayer('x', [pt('a'), pt('b'), ops.createFeature({ type: 'LineString', coordinates: [[0, 0], [1, 1]] })])
+    expect(ops.defaultName(l, 'Point')).toBe('נקודה 3')
+    expect(ops.defaultName(l, 'LineString')).toBe('קו 2')
+    expect(ops.defaultName(l, 'Polygon')).toBe('אזור 1')
+    expect(ops.defaultName(undefined, 'Point')).toBe('נקודה 1')
+  })
+})

@@ -1,10 +1,10 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useMapStore } from '../store/mapStore'
 import { useUi } from '../store/uiStore'
 import * as ops from '../model/ops'
 import type { Layer, LayerStyle, MapFeature } from '../model/types'
 import { PALETTE } from '../model/types'
-import { dayRouteUrls, sequenceNumbers, stopsOf } from '../model/itinerary'
+import { dayRouteUrls, stopsOf } from '../model/itinerary'
 import { formatDistance } from '../geo/measure'
 import { startSort } from '../lib/sortable'
 import { EmptyArt, Icon, IconButton, Swatches } from './ui'
@@ -21,17 +21,26 @@ export function setVisible(layerId: string | 'all', visible: boolean) {
 
 const TYPE_LABEL = { Point: 'נקודה', LineString: 'קו', Polygon: 'אזור' } as const
 
-export function FeatureRow({ f, layer, number, onOpen }: { f: MapFeature; layer: Layer; number?: number; onOpen: () => void }) {
+export function FeatureRow({ f, layer, position, onOpen }: { f: MapFeature; layer: Layer; position: number; onOpen: () => void }) {
   const selected = useMapStore((s) => s.selectedFeatureId === f.properties.id)
   const readOnly = useMapStore((s) => s.readOnly)
   const highlighted = useUi((s) => s.highlights.includes(f.properties.id))
+  const isNew = useUi((s) => s.justAdded === f.properties.id)
+  const ref = useRef<HTMLLIElement>(null)
+  useEffect(() => {
+    if (!isNew) return
+    ref.current?.scrollIntoView({ block: 'nearest' })
+    const t = setTimeout(() => useUi.getState().justAdded === f.properties.id && useUi.getState().setJustAdded(null), 1600)
+    return () => clearTimeout(t)
+  }, [isNew, f.properties.id])
   const color = featureColor(f, layer)
   return (
-    <li className={`frow ${selected ? 'is-selected' : ''} ${highlighted ? 'is-highlight' : ''}`} data-sort-item={f.properties.id}>
+    <li ref={ref} className={`frow ${selected ? 'is-selected' : ''} ${highlighted ? 'is-highlight' : ''} ${isNew ? 'is-new' : ''}`} data-sort-item={f.properties.id}>
       {!readOnly && (
         <span
           className="frow__grip"
           data-sort-handle
+          title="גרור כדי לסדר או להעביר שכבה"
           aria-hidden="true"
           onPointerDown={(e) =>
             startSort(e.nativeEvent, e.currentTarget, (r) => useMapStore.getState().apply((d) => ops.placeFeature(d, r.itemId, r.listId, r.index)))
@@ -41,8 +50,9 @@ export function FeatureRow({ f, layer, number, onOpen }: { f: MapFeature; layer:
         </span>
       )}
       <button type="button" className="frow__main" onClick={onOpen}>
+        <span className="frow__pos" aria-label={`מקום ${position} בשכבה`}>{position}</span>
         <span className={`frow__mark frow__mark--${f.geometry.type}`} style={{ '--c': color } as React.CSSProperties}>
-          {number ?? (f.geometry.type === 'Point' ? f.properties.icon : '')}
+          {f.geometry.type === 'Point' ? f.properties.icon : ''}
         </span>
         <span className="frow__name">{f.properties.name || <em>{TYPE_LABEL[f.geometry.type]} ללא שם</em>}</span>
       </button>
@@ -156,7 +166,6 @@ export function LayersPanel() {
   const [filter, setFilter] = useState('')
   const [menuFor, setMenuFor] = useState<string | null>(null)
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
-  const numbers = useMemo(() => sequenceNumbers(doc), [doc])
   const q = filter.trim().toLowerCase()
   const matches = (f: MapFeature) => !q || f.properties.name.toLowerCase().includes(q) || f.properties.description.toLowerCase().includes(q)
 
@@ -180,7 +189,6 @@ export function LayersPanel() {
               const l = ops.createLayer('שכבה חדשה', [], { color: ops.nextLayerColor(doc) })
               apply((d) => ops.addLayer(d, l))
               setActiveLayer(l.id)
-              setMenuFor(l.id)
             }}
           >
             <Icon name="plus" size={18} /> שכבה
@@ -204,7 +212,8 @@ export function LayersPanel() {
         const isCollapsed = collapsed.has(layer.id) && !q
         return (
           <section key={layer.id} className={`layer ${layer.id === activeLayerId && !readOnly ? 'is-active' : ''}`} style={{ '--c': layer.color } as React.CSSProperties}>
-            <header className="layer__head">
+            {/* the header is also a drop target, so items can be dropped onto collapsed layers */}
+            <header className="layer__head" data-sort-list={readOnly ? undefined : layer.id}>
               <IconButton
                 icon={layer.visible ? 'eye' : 'eyeOff'}
                 label={layer.visible ? 'הסתר שכבה' : 'הצג שכבה'}
@@ -229,9 +238,6 @@ export function LayersPanel() {
                 <span className="layer__title">
                   {layer.day ? <Icon name="calendar" size={16} /> : ops.hasRoute(layer) ? <Icon name="route" size={16} /> : null} {layer.name}
                 </span>
-                <span className="layer__meta">
-                  {layer.features.length} פריטים{layer.id === activeLayerId && !readOnly ? ' · פריטים חדשים יתווספו כאן' : ''}
-                </span>
               </button>
               {!readOnly && <IconButton icon="more" label={`הגדרות שכבה ${layer.name}`} active={menuFor === layer.id} onClick={() => setMenuFor(menuFor === layer.id ? null : layer.id)} />}
             </header>
@@ -239,7 +245,7 @@ export function LayersPanel() {
             {!isCollapsed && (
               <ul className="frows" data-sort-list={layer.id}>
                 {visible.map((f) => (
-                  <FeatureRow key={f.properties.id} f={f} layer={layer} number={numbers.get(f.properties.id)} onOpen={() => open(f)} />
+                  <FeatureRow key={f.properties.id} f={f} layer={layer} position={layer.features.indexOf(f) + 1} onOpen={() => open(f)} />
                 ))}
                 {layer.features.length === 0 && <li className="frows__empty">{readOnly ? 'השכבה ריקה' : 'גרור לכאן פריטים, או הוסף מהמפה'}</li>}
               </ul>
