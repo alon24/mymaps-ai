@@ -453,3 +453,14 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); ou
 
 .backup { margin: 12px 0 4px; padding: 10px 12px; border: 1px dashed var(--line); border-radius: 10px; }
 .backup .hint { margin-top: 0; }
+
+/* Google account: sign-in card, account line, header button */
+.signin-card { margin: 12px 0 4px; padding: 12px 14px; border-radius: 12px; background: color-mix(in srgb, var(--accent) 9%, var(--panel)); border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--line)); display: grid; gap: 10px; justify-items: start; }
+.signin-card p { margin: 0; line-height: 1.45; }
+.account { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 12px 0 0; padding: 8px 12px; border-radius: 10px; background: var(--raise); font-size: 0.9rem; }
+.account span { display: inline-flex; align-items: center; gap: 6px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.link-btn { all: unset; color: var(--accent); font-weight: 600; cursor: pointer; flex: none; }
+.link-btn:focus-visible { outline: 3px solid var(--focus); border-radius: 4px; }
+.signin { flex: none; align-self: center; color: var(--accent); font-weight: 700; }
+.maps > .btn--small { margin: 6px 0; }
+.sync--local { text-decoration: none !important; cursor: default; }

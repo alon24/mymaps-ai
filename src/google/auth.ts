@@ -53,9 +53,36 @@ function loadScript(src: string): Promise<void> {
 }
 
 let client: TokenClient | null = null
-let token: { value: string; expires: number } | null = null
 const SIGNED_IN_HINT = 'mymaps-ai.google-signed-in'
+/** Short-lived access token (drive.file only), kept so a reload doesn't force a new sign-in. */
+const TOKEN_KEY = 'mymaps-ai.google-token'
 const listeners = new Set<(signedIn: boolean) => void>()
+
+type Token = { value: string; expires: number }
+function restoreToken(): Token | null {
+  try {
+    const t = JSON.parse(localStorage.getItem(TOKEN_KEY) ?? 'null') as Token | null
+    return t && typeof t.value === 'string' && t.expires > Date.now() + 60_000 ? t : null
+  } catch {
+    return null
+  }
+}
+let token: Token | null = restoreToken()
+let expiryTimer: ReturnType<typeof setTimeout> | undefined
+
+function setToken(t: Token | null) {
+  token = t
+  clearTimeout(expiryTimer)
+  try {
+    if (t) localStorage.setItem(TOKEN_KEY, JSON.stringify(t))
+    else localStorage.removeItem(TOKEN_KEY)
+  } catch {
+    /* ignore */
+  }
+  // Tell the UI when the session runs out
+  if (t) expiryTimer = setTimeout(() => emit(), Math.max(0, t.expires - Date.now()) + 50)
+  emit()
+}
 
 export const isSignedIn = () => Boolean(token && token.expires > Date.now())
 export const wasSignedIn = () => {
@@ -70,6 +97,7 @@ export function onAuthChange(fn: (signedIn: boolean) => void): () => void {
   return () => listeners.delete(fn)
 }
 const emit = () => listeners.forEach((fn) => fn(isSignedIn()))
+if (token) expiryTimer = setTimeout(emit, Math.max(0, token.expires - Date.now()) + 50)
 
 async function getClient(): Promise<TokenClient> {
   if (!driveEnabled()) throw new Error('Google Drive לא הוגדר באפליקציה (חסר VITE_GOOGLE_CLIENT_ID)')
@@ -88,6 +116,11 @@ async function getClient(): Promise<TokenClient> {
  */
 export async function getToken(interactive = false): Promise<string> {
   if (token && token.expires - 60_000 > Date.now()) return token.value
+  // Never open a popup outside a click: browsers block it and the promise would never settle
+  if (!interactive) {
+    if (isSignedIn()) return token!.value
+    throw new Error('נדרשת התחברות מחדש ל-Google')
+  }
   const c = await getClient()
   return new Promise((resolve, reject) => {
     c.callback = (r) => {
@@ -95,30 +128,28 @@ export async function getToken(interactive = false): Promise<string> {
         reject(new Error(r.error === 'access_denied' ? 'ההרשאה ל-Google נדחתה' : 'ההתחברות ל-Google נכשלה'))
         return
       }
-      token = { value: r.access_token, expires: Date.now() + (r.expires_in ?? 3600) * 1000 }
       try {
         localStorage.setItem(SIGNED_IN_HINT, '1')
       } catch {
         /* ignore */
       }
-      emit()
+      setToken({ value: r.access_token, expires: Date.now() + (r.expires_in ?? 3600) * 1000 })
       resolve(r.access_token)
     }
     c.error_callback = (e) => reject(new Error(e.type === 'popup_closed' ? 'חלון ההתחברות נסגר' : 'ההתחברות ל-Google נכשלה'))
-    c.requestAccessToken({ prompt: interactive ? (wasSignedIn() ? '' : 'consent') : 'none' })
+    c.requestAccessToken({ prompt: wasSignedIn() ? '' : 'consent' })
   })
 }
 
 export async function signOut(): Promise<void> {
   const t = token?.value
-  token = null
   try {
     localStorage.removeItem(SIGNED_IN_HINT)
   } catch {
     /* ignore */
   }
+  setToken(null)
   if (t && window.google) await new Promise<void>((r) => window.google!.accounts.oauth2.revoke(t, r))
-  emit()
 }
 
 /**

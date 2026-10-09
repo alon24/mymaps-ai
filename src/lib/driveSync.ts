@@ -187,7 +187,8 @@ export function startAutosave(): () => void {
       const d = useMapStore.getState().doc
       if (d.id === docId) void storage.saveMap(d)
     }, 300)
-    if (s.readOnly || !s.doc.driveFileId || !driveEnabled()) return
+    // Drive maps always sync; when signed in, new local maps go to Drive too
+    if (s.readOnly || !driveEnabled() || (!s.doc.driveFileId && !isSignedIn())) return
     // Only metadata changed (after our own save)
     if (s.doc.updatedAt === prev.doc.updatedAt) return
     window.clearTimeout(driveTimer)
@@ -206,6 +207,56 @@ export function startAutosave(): () => void {
     window.removeEventListener('online', onOnline)
     window.removeEventListener('offline', onOffline)
   }
+}
+
+/**
+ * Upload every map that exists only on this device (one Drive file each).
+ * Returns how many were uploaded. Keeps going past individual failures.
+ */
+export async function uploadLocalMaps(): Promise<number> {
+  if (!driveEnabled() || !isSignedIn()) return 0
+  const c = await ctx()
+  const currentId = useMapStore.getState().doc.id
+  let n = 0
+  for (const summary of await storage.listMaps()) {
+    // Empty maps wait for their first edit (autosave uploads them then)
+    if (summary.driveFileId || summary.count === 0) continue
+    if (summary.id === currentId) {
+      if (!useMapStore.getState().readOnly && (await saveToDrive())) n++
+      continue
+    }
+    const raw = await storage.getMap(summary.id)
+    if (!raw || raw.viewOnly) continue
+    try {
+      const doc = migrate(raw)
+      const res = await drive.saveMap(c, doc)
+      await storage.saveMap({ ...doc, driveFileId: res.fileId, driveVersion: res.version })
+      n++
+    } catch {
+      /* try the rest; this one stays local and is retried next time */
+    }
+  }
+  return n
+}
+
+/** Sign in from a click, then move local-only maps to Drive. */
+export async function signIn(): Promise<boolean> {
+  try {
+    await getToken(true)
+  } catch (e) {
+    useUi.getState().showToast(e instanceof Error ? e.message : 'ההתחברות נכשלה', { tone: 'error' })
+    return false
+  }
+  const n = await uploadLocalMaps()
+  useUi.getState().showToast(n ? `התחברת. ${n} מפות נשמרו ב-Drive` : 'התחברת ל-Google Drive')
+  return true
+}
+
+/** On startup: if the open map lives in Drive and we're signed in, pull the latest version. */
+export async function refreshCurrentFromDrive(): Promise<void> {
+  const doc = useMapStore.getState().doc
+  if (!driveEnabled() || !isSignedIn() || !doc.driveFileId || !navigator.onLine) return
+  await openDriveMap(doc.driveFileId)
 }
 
 export { wasSignedIn }

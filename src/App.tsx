@@ -12,8 +12,30 @@ import { useUi, type PanelTab } from './store/uiStore'
 import * as ops from './model/ops'
 import { parseHash } from './lib/appBase'
 import * as storage from './lib/storage'
-import { lastMapId, openDriveMap, openLocal, saveToDrive, startAutosave, type OpenOutcome } from './lib/driveSync'
+import { lastMapId, openDriveMap, openLocal, refreshCurrentFromDrive, saveToDrive, signIn, startAutosave, uploadLocalMaps, type OpenOutcome } from './lib/driveSync'
 import { driveEnabled } from './env'
+import { isSignedIn, onAuthChange } from './google/auth'
+
+function useSignedIn() {
+  const [signed, setSigned] = useState(isSignedIn())
+  useEffect(() => onAuthChange(setSigned), [])
+  return signed
+}
+
+/** Header buttons: my maps (always) and Google sign-in (when Drive is configured). */
+function HeaderActions() {
+  const signed = useSignedIn()
+  return (
+    <>
+      <IconButton icon="globe" label="המפות שלי" onClick={() => useUi.getState().openDialog('maps')} />
+      {driveEnabled() && !signed && (
+        <button type="button" className="btn btn--small signin" onClick={() => void signIn()}>
+          <Icon name="cloud" size={16} /> התחבר
+        </button>
+      )}
+    </>
+  )
+}
 
 const TABS: { id: PanelTab; label: string; icon: string }[] = [
   { id: 'layers', label: 'שכבות', icon: 'layers' },
@@ -98,7 +120,16 @@ function SyncBadge() {
   const sync = useUi((s) => s.sync)
   const err = useUi((s) => s.syncError)
   const icon = sync === 'offline' || sync === 'error' || sync === 'needs-auth' ? 'cloudOff' : sync === 'local' || sync === 'view-only' ? '' : 'cloud'
+  const signed = useSignedIn()
   const actionable = sync === 'needs-auth' || sync === 'error'
+  if (sync === 'local' && driveEnabled() && !signed) {
+    // The header's "התחבר" button is the call to action; here we only state where the map lives
+    return (
+      <span className="sync sync--local" title="התחבר כדי לשמור ב-Google Drive">
+        <span>שמור רק במכשיר הזה</span>
+      </span>
+    )
+  }
   if (sync === 'local' && driveEnabled()) {
     return (
       <button type="button" className="sync sync--cta" onClick={() => useUi.getState().openDialog('share')}>
@@ -113,7 +144,7 @@ function SyncBadge() {
       className={`sync sync--${sync}`}
       title={err || SYNC_LABEL[sync]}
       disabled={!actionable}
-      onClick={() => void saveToDrive({ interactive: true })}
+      onClick={() => void (sync === 'needs-auth' && !signed ? signIn() : saveToDrive({ interactive: true }))}
     >
       {icon && <Icon name={icon} size={16} />}
       <span>{actionable ? `${SYNC_LABEL[sync]} · נסה שוב` : SYNC_LABEL[sync]}</span>
@@ -162,6 +193,8 @@ function AccessGate({ outcome, retry }: { outcome: OpenOutcome; retry: (o: { int
     </div>
   )
 }
+
+let startupSynced = false
 
 const SNAPS = ['peek', 'half', 'full'] as const
 
@@ -254,6 +287,12 @@ export default function App() {
         await openLocal(lastMapId())
       }
       setReady(true)
+      // Signed in from an earlier visit: pull the latest copy and move any local-only maps to Drive
+      if (isSignedIn() && !startupSynced) {
+        startupSynced = true
+        await refreshCurrentFromDrive().catch(() => undefined)
+        void uploadLocalMaps().catch(() => undefined)
+      }
     }
     void route()
     window.addEventListener('hashchange', route)
@@ -289,6 +328,7 @@ export default function App() {
             <Title />
             <SyncBadge />
           </div>
+          <HeaderActions />
           <Menu />
         </header>
         {selected ? (

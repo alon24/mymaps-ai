@@ -205,6 +205,17 @@ export async function saveMap(ctx: DriveCtx, doc: MapDoc, opts: { force?: boolea
   return { fileId: out.id, version: revisionOf(out) }
 }
 
+export interface DriveUser {
+  displayName?: string
+  emailAddress?: string
+}
+
+/** The signed-in Google account (works with the drive.file scope). */
+export async function getUser(ctx: DriveCtx): Promise<DriveUser> {
+  const res = await driveFetch(ctx, `${API}/about?fields=user(displayName,emailAddress)`)
+  return ((await res.json()) as { user?: DriveUser }).user ?? {}
+}
+
 /** Maps the app can see in the user's Drive (created by the app, or opened with it). */
 export async function listMaps(ctx: DriveCtx): Promise<DriveFileMeta[]> {
   const q = `trashed=false and mimeType='${MAP_MIME}' and appProperties has { key='${APP_TAG.key}' and value='${APP_TAG.value}' }`

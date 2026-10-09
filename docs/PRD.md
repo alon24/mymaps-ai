@@ -106,10 +106,12 @@ Priority: **P0** = v1 must, **P1** = v1 should, **P2** = later.
 
 ### 4.8 Google Drive storage and sharing
 - P0 Sign in with Google (scope `drive.file` only — the app sees only files it created or the user opened with it).
-- P0 A visible "Save to Drive & share" action in the panel header while the map is local.
+- P0 **Drive-first when signed in**: a "Sign in" button in the panel header (Google). Once signed in, every map with content is stored in Drive automatically (local-only maps are uploaded on sign-in; new maps on their first edit), so any device signed in to the same Google account sees the same maps. A "My maps" button in the header lists the Drive maps first, then maps that exist only on this device.
+- P0 Sign-in survives a reload until the Google access token expires (~1 hour; drive.file only). After that, one click on the sync badge or "Sign in" reconnects — no popup ever opens without a click.
+- P0 On startup while signed in, the open Drive map is refreshed from Drive (picks up edits made on another device).
 - P0 Save map to Drive (`<title>.mymap.json` in a "MyMaps AI" folder); autosave to Drive after edits (debounced).
 - P0 List and open the user's Drive maps.
-- P0 Conflict detection: before writing, compare Drive `version` with the last synced version; on conflict ask: keep mine / load theirs / save mine as a copy.
+- P0 Conflict detection: before writing, compare the Drive content revision (`headRevisionId`; `version` only as fallback, since it also changes on metadata/indexing) with the last synced one; saves run strictly one at a time; on conflict ask: keep mine / load theirs / save mine as a copy.
 - P0 Share:
   - view link: "anyone with the link can view" → app URL `#/m/<fileId>` opens read-only without sign-in;
   - invite people by email as editors or viewers (Drive permissions, Drive sends the email).
