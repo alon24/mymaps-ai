@@ -341,7 +341,9 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); ou
 }
 .toast--error { background: var(--danger); color: #fff; }
 .toast button { all: unset; cursor: pointer; color: var(--mark); font-weight: 700; }
-.gate { position: absolute; z-index: 1060; inset: auto 16px 32px; margin: 0 auto; max-width: 440px; display: grid; gap: 10px; padding: 16px; background: var(--panel); border-radius: var(--radius); box-shadow: var(--shadow); }
+/* Access gate: modal card above the map and the panel, map dimmed behind it */
+.gate { position: fixed; z-index: 1900; top: 50%; left: 50%; transform: translate(-50%, -50%); width: min(440px, calc(100% - 32px)); display: grid; gap: 10px; padding: 18px; background: var(--panel); border-radius: var(--radius); box-shadow: var(--shadow), 0 0 0 100vmax rgba(8, 18, 15, 0.45); animation: gate-in 200ms ease-out; }
+@keyframes gate-in { from { opacity: 0; transform: translate(-50%, -46%); } }
 .gate p { margin: 0; }
 
 /* ---------- mobile: bottom sheet ---------- */
@@ -369,7 +371,6 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); ou
   .leaflet-bottom { bottom: calc(var(--sheet-h) - 8px); }
   .leaflet-control-zoom { display: none; }
   .toast { bottom: calc(var(--sheet-h) + 12px); }
-  .gate { bottom: calc(var(--sheet-h) + 16px); }
   .sheet-full .map-hint, .sheet-full .toast { bottom: 24px; }
 }
 

@@ -14,7 +14,7 @@ import { parseHash } from './lib/appBase'
 import * as storage from './lib/storage'
 import { lastMapId, openDriveMap, openLocal, refreshCurrentFromDrive, saveToDrive, signIn, startAutosave, uploadLocalMaps, type OpenOutcome } from './lib/driveSync'
 import { driveEnabled } from './env'
-import { isSignedIn, onAuthChange } from './google/auth'
+import { isSignedIn, onAuthChange, wasSignedIn } from './google/auth'
 
 function useSignedIn() {
   const [signed, setSigned] = useState(isSignedIn())
@@ -183,7 +183,13 @@ function AccessGate({ outcome, retry }: { outcome: OpenOutcome; retry: (o: { int
   if (outcome !== 'needs-signin' && outcome !== 'needs-picker') return null
   return (
     <div className="gate" role="alert">
-      <p>{outcome === 'needs-signin' ? 'המפה הזו לא פתוחה לצפייה ציבורית. אם היא שותפה איתך, התחבר עם חשבון Google.' : 'כדי לפתוח את המפה, אשר את הגישה לקובץ ב-Google Drive.'}</p>
+      <p>
+        {outcome === 'needs-picker'
+          ? 'כדי לפתוח את המפה, אשר את הגישה לקובץ ב-Google Drive.'
+          : wasSignedIn()
+            ? 'ההתחברות ל-Google פגה. התחבר שוב כדי לפתוח את המפה.'
+            : 'המפה הזו לא פתוחה לצפייה ציבורית. אם היא שלך או שותפה איתך, התחבר עם חשבון Google.'}
+      </p>
       <button type="button" className="btn btn--primary" onClick={() => retry(outcome === 'needs-signin' ? { interactive: true } : { picker: true })}>
         {outcome === 'needs-signin' ? 'התחבר עם Google' : 'פתח את הקובץ'}
       </button>
@@ -318,7 +324,6 @@ export default function App() {
       <main className="stage">
         <MapView />
         <Toolbar />
-        {gate && <AccessGate outcome={gate.outcome} retry={retry} />}
       </main>
 
       <aside className="panel" aria-label="פאנל המפה">
@@ -363,6 +368,8 @@ export default function App() {
           </>
         )}
       </aside>
+      {/* Outside the stage so it sits above the panel / bottom sheet too */}
+      {gate && <AccessGate outcome={gate.outcome} retry={retry} />}
       <Toast />
       <Dialogs />
     </div>
