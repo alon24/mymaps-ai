@@ -125,3 +125,17 @@ test('AI proposes changes, user applies them, undo reverts', async ({ page }) =>
   await page.getByRole('button', { name: 'בטל (Ctrl+Z)' }).click()
   await expect(page.locator('.day')).toHaveCount(0)
 })
+
+test('back up all maps and restore them', async ({ page }) => {
+  await addPoint(page, 'לגיבוי', 0.5, 0.4)
+  await page.getByRole('button', { name: 'תפריט' }).click()
+  await page.getByRole('menuitem', { name: /המפות שלי/ }).click()
+  const download = page.waitForEvent('download')
+  await page.getByRole('button', { name: /גבה את כל המפות/ }).click()
+  const path = await (await download).path()
+  const backup = JSON.parse(readFileSync(path!, 'utf8'))
+  expect(backup.app).toBe('mymaps-ai')
+  expect(JSON.stringify(backup.maps)).toContain('לגיבוי')
+  await page.locator('.backup input[type=file]').setInputFiles({ name: 'b.json', mimeType: 'application/json', buffer: readFileSync(path!) })
+  await expect(page.locator('.toast')).toContainText('שוחזרו')
+})

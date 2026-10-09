@@ -11,6 +11,7 @@ import { useMapStore } from './store/mapStore'
 import { useUi, type PanelTab } from './store/uiStore'
 import * as ops from './model/ops'
 import { parseHash } from './lib/appBase'
+import * as storage from './lib/storage'
 import { lastMapId, openDriveMap, openLocal, saveToDrive, startAutosave, type OpenOutcome } from './lib/driveSync'
 import { driveEnabled } from './env'
 
@@ -225,6 +226,9 @@ export default function App() {
   const [ready, setReady] = useState(false)
 
   useEffect(() => startAutosave(), [])
+  useEffect(() => {
+    void storage.requestPersistence()
+  }, [])
 
   // On phones, open the sheet enough to show the editor when something is selected
   useEffect(() => {

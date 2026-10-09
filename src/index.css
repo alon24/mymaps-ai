@@ -450,3 +450,6 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); ou
 /* new item flashes in its layer instead of opening the editor */
 @keyframes row-flash { 0%, 40% { background: color-mix(in srgb, var(--mark) 55%, transparent); } 100% { background: transparent; } }
 .frow.is-new { animation: row-flash 1.6s ease-out both; }
+
+.backup { margin: 12px 0 4px; padding: 10px 12px; border: 1px dashed var(--line); border-radius: 10px; }
+.backup .hint { margin-top: 0; }

@@ -109,6 +109,8 @@ function MapsDialog() {
         </button>
       </div>
 
+      <BackupBar onRestored={() => void refresh()} />
+
       <h3>במכשיר הזה</h3>
       <ul className="map-list">
         {local.map((m) => (
@@ -193,6 +195,59 @@ function MapsDialog() {
           )}
         </>
       )}
+    </div>
+  )
+}
+
+/** Backup all local maps to one file / restore from it. Shown where the maps are listed. */
+function BackupBar({ onRestored }: { onRestored: () => void }) {
+  const fileRef = useRef<HTMLInputElement>(null)
+  const [persisted, setPersisted] = useState<boolean | null>(null)
+  useEffect(() => {
+    navigator.storage?.persisted?.().then(setPersisted).catch(() => setPersisted(null))
+  }, [])
+  return (
+    <div className="backup">
+      <p className="hint">
+        {driveEnabled()
+          ? 'מפות שלא נשמרו ב-Drive קיימות רק בדפדפן הזה. כדאי לשמור אותן ב-Drive או לגבות.'
+          : 'המפות נשמרות רק בדפדפן הזה. ניקוי נתוני הדפדפן ימחק אותן, לכן כדאי לגבות מדי פעם.'}
+        {persisted ? ' הדפדפן סימן את האחסון כקבוע.' : ''}
+      </p>
+      <div className="row row--wrap">
+        <button
+          type="button"
+          className="btn"
+          onClick={async () => {
+            const backup = await storage.exportAll()
+            downloadBlob(new Blob([JSON.stringify(backup)], { type: 'application/json' }), `mymaps-backup-${backup.createdAt.slice(0, 10)}.json`)
+            useUi.getState().showToast(`גובו ${backup.maps.length} מפות`)
+          }}
+        >
+          <Icon name="download" size={18} /> גבה את כל המפות
+        </button>
+        <button type="button" className="btn" onClick={() => fileRef.current?.click()}>
+          <Icon name="upload" size={18} /> שחזר מגיבוי
+        </button>
+        <input
+          ref={fileRef}
+          type="file"
+          hidden
+          accept=".json,application/json"
+          onChange={async (e) => {
+            const file = e.target.files?.[0]
+            e.target.value = ''
+            if (!file) return
+            try {
+              const r = await storage.importAll(JSON.parse(await file.text()), ops.migrate)
+              useUi.getState().showToast(`שוחזרו ${r.added} מפות, עודכנו ${r.updated}`)
+              onRestored()
+            } catch (err) {
+              useUi.getState().showToast(err instanceof Error ? err.message : 'השחזור נכשל', { tone: 'error' })
+            }
+          }}
+        />
+      </div>
     </div>
   )
 }

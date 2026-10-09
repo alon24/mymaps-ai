@@ -42,6 +42,7 @@ Priority: **P0** = v1 must, **P1** = v1 should, **P2** = later.
 - P0 Autosave locally (IndexedDB) on every change; no "save" button needed for local maps.
 - P0 Undo/redo for every edit (≥100 steps), including AI-applied changes as a single step.
 - P1 Duplicate a map.
+- P0 Durability without Google: request persistent browser storage; **back up all maps** to one JSON file and **restore** from it (a restored map replaces a local copy only if newer). The maps list explains that local maps live only in this browser.
 
 ### 4.2 Base map and navigation
 - P0 Base layers: streets (OSM), satellite (Esri World Imagery), terrain (OpenTopoMap), with attribution.
