@@ -94,3 +94,19 @@ describe('defaultName', () => {
     expect(ops.defaultName(undefined, 'Point')).toBe('נקודה 1')
   })
 })
+
+describe('moving between layers', () => {
+  it('adopts the target layer color unless the feature has a custom color', () => {
+    const m = ops.createMap()
+    const plain = ops.createFeature({ type: 'Point', coordinates: [1, 1] }, { name: 'plain', color: '#1f6f5c' })
+    const custom = ops.createFeature({ type: 'Point', coordinates: [1, 1] }, { name: 'custom', color: '#7b2d8e' })
+    m.layers = [ops.createLayer('A', [plain, custom], { color: '#1f6f5c' }), ops.createLayer('B', [], { color: '#d1495b' })]
+    const b = m.layers[1].id
+    let d = ops.placeFeature(m, plain.properties.id, b, 0)
+    d = ops.moveFeatureToLayer(d, custom.properties.id, b)
+    expect(d.layers[1].features.map((f) => [f.properties.name, f.properties.color])).toEqual([
+      ['plain', '#d1495b'],
+      ['custom', '#7b2d8e'],
+    ])
+  })
+})

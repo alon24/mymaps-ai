@@ -84,7 +84,11 @@ export const useUi = create<UiState>((set) => ({
   dismissToast: () => set({ toast: null }),
   focusOn: (target) => set((s) => ({ focus: { ...target, n: (s.focus?.n ?? 0) + 1 } })),
   setHighlights: (highlights) => set({ highlights }),
-  setJustAdded: (justAdded) => set({ justAdded }),
+  setJustAdded: (justAdded) => {
+    set({ justAdded })
+    // the flash is one-shot: clear it so the row doesn't flash again when re-rendered elsewhere
+    if (justAdded) setTimeout(() => useUi.getState().justAdded === justAdded && set({ justAdded: null }), 1700)
+  },
   setSearchPin: (searchPin) => set({ searchPin }),
   setUserLocation: (userLocation, userAccuracy = 0) => set({ userLocation, userAccuracy }),
   setTracking: (tracking) => set({ tracking }),

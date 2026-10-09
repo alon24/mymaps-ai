@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useMapStore } from './mapStore'
 import * as ops from '../model/ops'
 
@@ -43,5 +43,17 @@ describe('map store undo/redo', () => {
     s().select(f.properties.id)
     s().apply((d) => ops.removeFeature(d, f.properties.id))
     expect(s().selectedFeatureId).toBeNull()
+  })
+})
+
+describe('ui justAdded', () => {
+  it('clears itself after the flash', async () => {
+    const { useUi } = await import('./uiStore')
+    vi.useFakeTimers()
+    useUi.getState().setJustAdded('x')
+    expect(useUi.getState().justAdded).toBe('x')
+    vi.advanceTimersByTime(1800)
+    expect(useUi.getState().justAdded).toBeNull()
+    vi.useRealTimers()
   })
 })

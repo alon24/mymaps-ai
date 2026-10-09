@@ -30,9 +30,7 @@ export function FeatureRow({ f, layer, position, onOpen }: { f: MapFeature; laye
   useEffect(() => {
     if (!isNew) return
     ref.current?.scrollIntoView({ block: 'nearest' })
-    const t = setTimeout(() => useUi.getState().justAdded === f.properties.id && useUi.getState().setJustAdded(null), 1600)
-    return () => clearTimeout(t)
-  }, [isNew, f.properties.id])
+  }, [isNew])
   const color = featureColor(f, layer)
   return (
     <li ref={ref} className={`frow ${selected ? 'is-selected' : ''} ${highlighted ? 'is-highlight' : ''} ${isNew ? 'is-new' : ''}`} data-sort-item={f.properties.id}>

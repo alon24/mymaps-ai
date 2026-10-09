@@ -137,8 +137,9 @@ export const removeFeature = (doc: MapDoc, featureId: string): MapDoc =>
 
 export function moveFeatureToLayer(doc: MapDoc, featureId: string, toLayerId: string): MapDoc {
   const found = findFeature(doc, featureId)
-  if (!found || found.layer.id === toLayerId) return doc
-  return addFeature(removeFeature(doc, featureId), toLayerId, found.feature)
+  const target = doc.layers.find((l) => l.id === toLayerId)
+  if (!found || !target || found.layer.id === toLayerId) return doc
+  return placeFeature(doc, featureId, toLayerId, target.features.length)
 }
 
 const TYPE_NAMES = { Point: 'נקודה', LineString: 'קו', Polygon: 'אזור' } as const
@@ -199,7 +200,12 @@ export function placeFeature(doc: MapDoc, featureId: string, toLayerId: string, 
   const layers = doc.layers.map((l) => ({ ...l, features: l.features.filter((f) => f.properties.id !== featureId) }))
   const target = layers.find((l) => l.id === toLayerId)!
   const i = Math.max(0, Math.min(toIndex, target.features.length))
-  target.features = [...target.features.slice(0, i), found.feature, ...target.features.slice(i)]
+  // A feature still wearing its old layer's color takes the new layer's color; custom colors are kept
+  const moved =
+    found.layer.id !== toLayerId && found.feature.properties.color === found.layer.color
+      ? { ...found.feature, properties: { ...found.feature.properties, color: target.color } }
+      : found.feature
+  target.features = [...target.features.slice(0, i), moved, ...target.features.slice(i)]
   return touch({ ...doc, layers })
 }
 
