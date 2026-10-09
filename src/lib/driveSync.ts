@@ -118,9 +118,11 @@ export async function saveToDrive(opts: { interactive?: boolean; force?: boolean
     ui.setSync('needs-auth')
     return false
   }
-  if (saving) await saving.catch(() => undefined)
+  // One save at a time, strictly in order (a drag & drop fires several edits in a row)
+  const previous = saving
   let ok = false
-  saving = (async () => {
+  const run = (async () => {
+    if (previous) await previous.catch(() => undefined)
     ui.setSync('saving')
     try {
       const doc = useMapStore.getState().doc
@@ -142,8 +144,9 @@ export async function saveToDrive(opts: { interactive?: boolean; force?: boolean
       }
     }
   })()
-  await saving
-  saving = null
+  saving = run
+  await run
+  if (saving === run) saving = null
   return ok
 }
 

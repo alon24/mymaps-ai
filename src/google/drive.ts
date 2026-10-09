@@ -33,13 +33,15 @@ export interface DriveFileMeta {
   id: string
   name: string
   version: string
+  /** Changes only when the file content changes (unlike `version`, which also bumps on metadata/indexing) */
+  headRevisionId?: string
   modifiedTime: string
   ownedByMe?: boolean
   shared?: boolean
   capabilities?: { canEdit?: boolean; canShare?: boolean }
 }
 
-const META_FIELDS = 'id,name,version,modifiedTime,ownedByMe,shared,capabilities(canEdit,canShare)'
+const META_FIELDS = 'id,name,version,headRevisionId,modifiedTime,ownedByMe,shared,capabilities(canEdit,canShare)'
 
 async function driveFetch(ctx: DriveCtx, url: string, init: RequestInit = {}): Promise<Response> {
   const f = ctx.fetch ?? fetch
@@ -102,6 +104,10 @@ async function findOrCreateFolder(ctx: DriveCtx): Promise<string> {
   return ((await created.json()) as { id: string }).id
 }
 
+/** Identity of the file content we synced with. Falls back to `version` when Drive gives no revision id. */
+export const revisionOf = (m: { version: string; headRevisionId?: string }): string =>
+  m.headRevisionId ? `r:${m.headRevisionId}` : m.version
+
 export async function getMeta(ctx: DriveCtx, fileId: string): Promise<DriveFileMeta> {
   const res = await driveFetch(ctx, `${API}/files/${encodeURIComponent(fileId)}?fields=${META_FIELDS}&supportsAllDrives=true`)
   return (await res.json()) as DriveFileMeta
@@ -123,7 +129,7 @@ export async function loadMap(ctx: DriveCtx, fileId: string): Promise<LoadedMap>
   } catch {
     throw new DriveError('הקובץ ב-Drive אינו מפה של MyMaps AI', 422)
   }
-  const doc = { ...migrate(raw), driveFileId: meta.id, driveVersion: meta.version }
+  const doc = { ...migrate(raw), driveFileId: meta.id, driveVersion: revisionOf(meta) }
   return { doc, meta, canEdit: Boolean(ctx.token) && meta.capabilities?.canEdit !== false }
 }
 
@@ -131,11 +137,16 @@ export type SyncDecision = 'create' | 'update' | 'conflict'
 
 /**
  * Decide how to write: new file, safe update, or conflict (someone else saved since our last sync).
- * Drive `version` increases on every change to the file.
+ * `r:`-prefixed values are content revision ids (equal = safe). Plain numbers are Drive `version`s
+ * (either the no-revision fallback, or legacy values saved before revision ids were used).
  */
 export function decideSync(local: Pick<MapDoc, 'driveFileId' | 'driveVersion'>, remoteVersion: string | null): SyncDecision {
   if (!local.driveFileId || remoteVersion === null) return 'create'
   if (!local.driveVersion) return 'conflict'
+  const localIsRev = local.driveVersion.startsWith('r:')
+  const remoteIsRev = remoteVersion.startsWith('r:')
+  if (remoteIsRev) return !localIsRev || local.driveVersion === remoteVersion ? 'update' : 'conflict' // legacy value: accept once
+  if (localIsRev) return 'update'
   return BigInt(remoteVersion) > BigInt(local.driveVersion) ? 'conflict' : 'update'
 }
 
@@ -161,7 +172,7 @@ export async function saveMap(ctx: DriveCtx, doc: MapDoc, opts: { force?: boolea
   if (doc.driveFileId) {
     try {
       const meta = await getMeta(ctx, doc.driveFileId)
-      remoteVersion = meta.version
+      remoteVersion = revisionOf(meta)
     } catch (e) {
       if (!(e instanceof DriveError && e.status === 404)) throw e
     }
@@ -176,22 +187,22 @@ export async function saveMap(ctx: DriveCtx, doc: MapDoc, opts: { force?: boolea
       { name: fileName(doc), mimeType: MAP_MIME, parents: [folder], appProperties: { [APP_TAG.key]: APP_TAG.value } },
       content,
     )
-    const res = await driveFetch(ctx, `${UPLOAD}/files?uploadType=multipart&fields=id,version`, {
+    const res = await driveFetch(ctx, `${UPLOAD}/files?uploadType=multipart&fields=id,version,headRevisionId`, {
       method: 'POST',
       headers: { 'Content-Type': contentType },
       body,
     })
-    const { id, version } = (await res.json()) as { id: string; version: string }
-    return { fileId: id, version }
+    const out = (await res.json()) as { id: string; version: string; headRevisionId?: string }
+    return { fileId: out.id, version: revisionOf(out) }
   }
   const { body, contentType } = multipartBody({ name: fileName(doc) }, content)
   const res = await driveFetch(
     ctx,
-    `${UPLOAD}/files/${encodeURIComponent(doc.driveFileId!)}?uploadType=multipart&fields=id,version&supportsAllDrives=true`,
+    `${UPLOAD}/files/${encodeURIComponent(doc.driveFileId!)}?uploadType=multipart&fields=id,version,headRevisionId&supportsAllDrives=true`,
     { method: 'PATCH', headers: { 'Content-Type': contentType }, body },
   )
-  const { id, version } = (await res.json()) as { id: string; version: string }
-  return { fileId: id, version }
+  const out = (await res.json()) as { id: string; version: string; headRevisionId?: string }
+  return { fileId: out.id, version: revisionOf(out) }
 }
 
 /** Maps the app can see in the user's Drive (created by the app, or opened with it). */

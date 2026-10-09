@@ -29,6 +29,15 @@ describe('decideSync', () => {
     expect(decideSync({ driveFileId: 'f', driveVersion: '9' }, '10')).toBe('conflict') // numeric, not string compare
     expect(decideSync({ driveFileId: 'f' }, '1')).toBe('conflict')
   })
+
+  it('compares content revisions: equal is safe, different is a conflict', () => {
+    expect(decideSync({ driveFileId: 'f', driveVersion: 'r:abc' }, 'r:abc')).toBe('update')
+    expect(decideSync({ driveFileId: 'f', driveVersion: 'r:abc' }, 'r:abd')).toBe('conflict')
+  })
+
+  it('accepts a legacy numeric version once when Drive now reports a revision id', () => {
+    expect(decideSync({ driveFileId: 'f', driveVersion: '5' }, 'r:abc')).toBe('update')
+  })
 })
 
 describe('saveMap', () => {
@@ -63,6 +72,16 @@ describe('saveMap', () => {
     const before = calls.length
     expect(await saveMap({ token: 'T', fetch }, doc, { force: true })).toEqual({ fileId: 'F', version: '8' })
     expect(calls.length).toBe(before + 2)
+  })
+
+  it('does not report a conflict when Drive bumps `version` without changing the content', async () => {
+    // Drive increments `version` on metadata/indexing changes too; headRevisionId only changes with content.
+    const { fetch } = fakeDrive({
+      'GET /drive/v3/files/F': () => ({ id: 'F', version: '12', headRevisionId: 'REV1', name: 'x', modifiedTime: '' }),
+      'PATCH /upload/drive/v3/files/F': () => ({ id: 'F', version: '13', headRevisionId: 'REV2' }),
+    })
+    const doc = { ...createMap('x'), driveFileId: 'F', driveVersion: 'r:REV1' }
+    expect(await saveMap({ token: 'T', fetch }, doc)).toEqual({ fileId: 'F', version: 'r:REV2' })
   })
 })
 
