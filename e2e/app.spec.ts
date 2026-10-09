@@ -17,6 +17,7 @@ async function addPoint(page: Page, name: string, x: number, y: number) {
   await expect(page.getByLabel('שם', { exact: true })).toHaveCount(0)
   await expect(page.locator('.frow.is-new')).toHaveCount(1)
   await page.locator('.toast').getByRole('button', { name: 'ערוך' }).click()
+  await page.locator('.editor__title button').click()
   const field = page.getByLabel('שם', { exact: true })
   await field.fill(name)
   await field.press('Enter')
@@ -80,7 +81,7 @@ test('export KML and import it back as a new map', async ({ page }) => {
 test('undo restores a deleted point', async ({ page }) => {
   await addPoint(page, 'למחיקה', 0.5, 0.4)
   await page.locator('.frow__main', { hasText: 'למחיקה' }).click()
-  await page.getByRole('button', { name: /מחק/ }).click()
+  await page.getByRole('button', { name: 'מחק פריט' }).click()
   await expect(page.locator('.frow')).toHaveCount(0)
   await page.getByRole('button', { name: 'בטל', exact: true }).click()
   await expect(page.locator('.frow')).toHaveCount(1)

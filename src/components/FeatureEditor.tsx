@@ -7,7 +7,8 @@ import { describeGeometry } from '../geo/measure'
 import { googleSearchUrl, navigateUrl } from '../model/itinerary'
 import { distanceFromMe } from '../lib/location'
 import { stripTags } from '../io/itineraryHtml'
-import { Icon, IconButton, Swatches } from './ui'
+import { Icon, IconButton, RenameField, Swatches } from './ui'
+import { searchPlaces, type Place } from '../geo/search'
 
 const linkify = (text: string) =>
   text.split(/(https?:\/\/[^\s]+)/g).map((part, i) =>
@@ -35,6 +36,77 @@ function PlaceLinks({ name, coords }: { name: string; coords: number[] }) {
   )
 }
 
+/** Move a point to a searched address (or pasted coordinates). Dragging the pin also works. */
+export function LocationField({ featureId }: { featureId: string }) {
+  const [q, setQ] = useState('')
+  const [results, setResults] = useState<Place[] | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const search = async () => {
+    if (q.trim().length < 2) return
+    setBusy(true)
+    setError('')
+    try {
+      const r = await searchPlaces(q, { viewbox: useUi.getState().mapBounds ?? undefined, limit: 5 })
+      setResults(r)
+      if (!r.length) setError('לא נמצאה כתובת כזו')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'החיפוש נכשל')
+    } finally {
+      setBusy(false)
+    }
+  }
+  const moveTo = (pl: Place) => {
+    useMapStore.getState().apply((d) =>
+      ops.updateFeature(d, featureId, { geometry: { type: 'Point', coordinates: [Number(pl.lng.toFixed(7)), Number(pl.lat.toFixed(7))] } }),
+    )
+    useUi.getState().focusOn({ featureId })
+    useUi.getState().showToast('המיקום עודכן', { action: { label: 'בטל', run: () => useMapStore.getState().undo() } })
+    setResults(null)
+    setQ('')
+  }
+  return (
+    <div className="field location">
+      <span>תיקון מיקום</span>
+      <form
+        className="location__search"
+        onSubmit={(e) => {
+          e.preventDefault()
+          void search()
+        }}
+      >
+        <input
+          value={q}
+          onChange={(e) => {
+            setQ(e.target.value)
+            setResults(null)
+          }}
+          placeholder="כתובת או קואורדינטות"
+          aria-label="כתובת חדשה"
+          enterKeyHint="search"
+        />
+        <button type="submit" className="btn btn--small" disabled={busy || q.trim().length < 2}>
+          {busy ? '…' : 'חפש'}
+        </button>
+      </form>
+      {error && <p className="error">{error}</p>}
+      {results && results.length > 0 && (
+        <ul className="location__results">
+          {results.map((r) => (
+            <li key={`${r.lat},${r.lng}`}>
+              <button type="button" onClick={() => moveTo(r)}>
+                <strong>{r.name}</strong>
+                <span>{r.label}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <p className="hint">או גרור את הסיכה על המפה.</p>
+    </div>
+  )
+}
+
 export function FeatureEditor() {
   const doc = useMapStore((s) => s.doc)
   const id = useMapStore((s) => s.selectedFeatureId)
@@ -43,13 +115,13 @@ export function FeatureEditor() {
   const { apply, select } = useMapStore.getState()
   const found = id ? ops.findFeature(doc, id) : undefined
   // Local drafts so typing doesn't create an undo step per keystroke
-  const [name, setName] = useState('')
+  const [renaming, setRenaming] = useState(false)
   const [desc, setDesc] = useState('')
+  useEffect(() => setRenaming(false), [id])
   useEffect(() => {
-    setName(found?.feature.properties.name ?? '')
     setDesc(found ? stripTags(found.feature.properties.description) : '')
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id, found?.feature.properties.name, found?.feature.properties.description])
+  }, [id, found?.feature.properties.description])
 
   if (!found) return null
   const { feature: f, layer } = found
@@ -74,15 +146,22 @@ export function FeatureEditor() {
   return (
     <article className="editor" aria-label="עריכת פריט">
       <header className="editor__head">
-        <input
-          className="editor__name"
-          value={name}
-          placeholder="שם"
-          aria-label="שם"
-          onChange={(e) => setName(e.target.value)}
-          onBlur={() => name !== p.name && commit({ name: name.trim() })}
-          onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
-          autoFocus={!p.name}
+        {renaming ? (
+          <RenameField label="שם" value={p.name} onSave={(v) => commit({ name: v })} onDone={() => setRenaming(false)} />
+        ) : (
+          <h2 className="editor__title">
+            <button type="button" onClick={() => setRenaming(true)} title="שנה שם">
+              {p.icon} {p.name || 'ללא שם'} <Icon name="edit" size={16} />
+            </button>
+          </h2>
+        )}
+        <IconButton
+          icon="trash"
+          label="מחק פריט"
+          onClick={() => {
+            apply((d) => ops.removeFeature(d, p.id))
+            useUi.getState().showToast(`"${p.name || 'הפריט'}" נמחק`, { action: { label: 'בטל', run: () => useMapStore.getState().undo() } })
+          }}
         />
         <IconButton icon="close" label="סיום עריכה" onClick={() => select(null)} />
       </header>
@@ -96,7 +175,8 @@ export function FeatureEditor() {
         onBlur={() => desc !== stripTags(p.description) && commit({ description: desc })}
       />
       <p className="editor__meta">{[describeGeometry(f.geometry), isPoint ? distanceFromMe(me, f.geometry.coordinates as number[]) : ''].filter(Boolean).join(' · ')}</p>
-      {isPoint && <PlaceLinks name={name || p.name} coords={f.geometry.coordinates as number[]} />}
+      {isPoint && <PlaceLinks name={p.name} coords={f.geometry.coordinates as number[]} />}
+      {isPoint && <LocationField key={p.id} featureId={p.id} />}
 
       <div className="field">
         <span>צבע{layer.style !== 'individual' ? ' (השכבה מוגדרת לצבע אחיד — שנה בהגדרות השכבה)' : ''}</span>
@@ -135,20 +215,7 @@ export function FeatureEditor() {
         </select>
       </label>
 
-      <div className="row row--wrap">
-        <button
-          type="button"
-          className="btn btn--danger"
-          onClick={() => {
-            apply((d) => ops.removeFeature(d, p.id))
-            useUi.getState().showToast(`"${p.name || 'הפריט'}" נמחק`, { action: { label: 'בטל', run: () => useMapStore.getState().undo() } })
-          }}
-        >
-          <Icon name="trash" size={18} /> מחק
-        </button>
-      </div>
       {!isPoint && <p className="hint">גרור את הנקודות הלבנות על המפה כדי לשנות את הצורה.</p>}
-      {isPoint && <p className="hint">גרור את הסמן על המפה כדי להזיז אותו.</p>}
     </article>
   )
 }

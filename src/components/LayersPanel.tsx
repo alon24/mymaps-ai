@@ -33,6 +33,9 @@ export function FeatureRow({ f, layer, position, onOpen }: { f: MapFeature; laye
     ref.current?.scrollIntoView({ block: 'nearest' })
   }, [isNew])
   const color = featureColor(f, layer)
+  const [renaming, setRenaming] = useState(false)
+  // Tap/click opens the item; long press renames it in place (like layer names)
+  const press = useLongPress(() => !readOnly && setRenaming(true), { onClick: onOpen, onTap: onOpen })
   return (
     <li ref={ref} className={`frow ${selected ? 'is-selected' : ''} ${highlighted ? 'is-highlight' : ''} ${isNew ? 'is-new' : ''}`} data-sort-item={f.properties.id}>
       {!readOnly && (
@@ -48,13 +51,23 @@ export function FeatureRow({ f, layer, position, onOpen }: { f: MapFeature; laye
           <Icon name="grip" size={18} />
         </span>
       )}
-      <button type="button" className="frow__main" onClick={onOpen}>
-        <span className="frow__pos" aria-label={`מקום ${position} בשכבה`}>{position}</span>
-        <span className={`frow__mark frow__mark--${f.geometry.type}`} style={{ '--c': color } as React.CSSProperties}>
-          {f.geometry.type === 'Point' ? f.properties.icon : ''}
-        </span>
-        <span className="frow__name">{f.properties.name || <em>{TYPE_LABEL[f.geometry.type]} ללא שם</em>}</span>
-      </button>
+      {renaming && !readOnly ? (
+        <RenameField
+          className="frow__rename"
+          label="שם הפריט"
+          value={f.properties.name}
+          onSave={(v) => useMapStore.getState().apply((d) => ops.updateFeature(d, f.properties.id, { name: v }))}
+          onDone={() => setRenaming(false)}
+        />
+      ) : (
+        <button type="button" className="frow__main" {...press} title={readOnly ? undefined : 'לחיצה ארוכה לשינוי שם'}>
+          <span className="frow__pos" aria-label={`מקום ${position} בשכבה`}>{position}</span>
+          <span className={`frow__mark frow__mark--${f.geometry.type}`} style={{ '--c': color } as React.CSSProperties}>
+            {f.geometry.type === 'Point' ? f.properties.icon : ''}
+          </span>
+          <span className="frow__name">{f.properties.name || <em>{TYPE_LABEL[f.geometry.type]} ללא שם</em>}</span>
+        </button>
+      )}
     </li>
   )
 }

@@ -104,6 +104,7 @@ Priority: **P0** = v1 must, **P1** = v1 should, **P2** = later.
 - P0 Itinerary HTML (see 4.5).
 - P0 Round-trip guarantee: export → import keeps layers, names, descriptions, colors, icons and geometry (tested).
 
+- P0 Feature editor (phone-friendly): header pinned with name (✎ → rename with ✓/✕), Delete (undo in toast) and Close. Points: *Fix location* — search an address or paste coordinates, pick a result, the point moves (one undo step); dragging the pin also works. Feature rows rename on long press, like layers.
 - P0 Touch: renaming the map or a layer is a long press (click on desktop), with ✓ / ✕ buttons; a plain tap never starts a rename. The phone sheet drags from its whole header; the app disables pull-to-refresh so dragging never reloads it.
 
 ### 4.8 Google Drive storage and sharing

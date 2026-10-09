@@ -263,7 +263,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); ou
 
 /* ---------- editor ---------- */
 .editor { padding: 4px 4px 16px; }
-.editor__head { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+.editor__head { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; position: sticky; top: 0; z-index: 3; background: var(--panel); padding: 4px 0; }
 .editor__head h2 { flex: 1; font-size: 1.25rem; }
 .editor__name { font-size: 1.2rem !important; font-weight: 700; }
 .editor__desc { white-space: pre-wrap; overflow-wrap: anywhere; }
@@ -480,3 +480,17 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); ou
 .signin { flex: none; align-self: center; color: var(--accent); font-weight: 700; }
 .maps > .btn--small { margin: 6px 0; }
 .sync--local { text-decoration: none !important; cursor: default; }
+
+/* Feature editor: title button, address fix */
+.editor__title { flex: 1; min-width: 0; font-size: 1.2rem; margin: 0; }
+.editor__title button { all: unset; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; overflow-wrap: anywhere; border-radius: 6px; padding: 2px 0; }
+.editor__title button svg { color: var(--ink-2); flex: none; }
+.editor__title button:focus-visible { outline: 3px solid var(--focus); }
+.location__search { display: flex; gap: 6px; }
+.location__search input { flex: 1; min-width: 0; }
+.location__results { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 4px; }
+.location__results button { all: unset; box-sizing: border-box; width: 100%; display: grid; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; cursor: pointer; }
+.location__results button:hover, .location__results button:focus-visible { background: var(--raise); }
+.location__results span { color: var(--muted); font-size: 0.85rem; }
+.frow__rename { padding: 2px 4px; }
+.frow__main { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
