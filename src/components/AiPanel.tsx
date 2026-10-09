@@ -2,7 +2,9 @@ import { useEffect, useRef, useState } from 'react'
 import { useMapStore } from '../store/mapStore'
 import { useUi } from '../store/uiStore'
 import { askAi, type ChatMessage } from '../lib/api'
-import { isConfigured, loadSettings } from '../lib/settings'
+import { loadSettings, workerAccess } from '../lib/settings'
+import { isSignedIn, onAuthChange } from '../google/auth'
+import { signIn } from '../lib/driveSync'
 import { applyActions, describeActions, highlightedIds, parseAiResponse, type AiAction } from '../ai/actions'
 import { QUICK_PROMPTS, SYSTEM_PROMPT, mapContext } from '../ai/prompt'
 import { geocode } from '../geo/search'
@@ -27,7 +29,9 @@ export function AiPanel() {
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)
   const endRef = useRef<HTMLDivElement>(null)
-  const configured = isConfigured(loadSettings())
+  const [signed, setSigned] = useState(isSignedIn())
+  useEffect(() => onAuthChange(setSigned), [])
+  const access = workerAccess(loadSettings(), signed)
 
   // Braces matter: newer Chrome returns a Promise from scrollIntoView, and an effect must not return one
   useEffect(() => {
@@ -87,7 +91,19 @@ export function AiPanel() {
     useUi.getState().focusOn({ all: true })
   }
 
-  if (!configured) {
+  if (access === 'needs-signin') {
+    return (
+      <div className="ai ai--setup">
+        <Icon name="sparkle" size={28} />
+        <p>כדי להשתמש בעוזר ה-AI, התחבר עם חשבון Google.</p>
+        <button type="button" className="btn btn--primary" onClick={() => void signIn()}>
+          <Icon name="cloud" size={18} /> התחבר עם Google
+        </button>
+      </div>
+    )
+  }
+
+  if (access !== 'ready') {
     return (
       <div className="ai ai--setup">
         <Icon name="sparkle" size={28} />

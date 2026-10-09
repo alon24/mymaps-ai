@@ -45,8 +45,8 @@ Rules that always hold:
 - **Storage:** IndexedDB (via `idb`) is the local source of truth; Drive sync on top. Drive files store the MapDoc as JSON (`.mymap.json`); KML is offered as export.
 - **Google:** Google Identity Services (OAuth token client) + Drive API v3 from the browser, scope `drive.file` only. `VITE_GOOGLE_CLIENT_ID` and `VITE_GOOGLE_API_KEY` are public config (restricted by HTTP referrer in Google Cloud), kept in `.env` and GitHub Actions variables, not hard-coded.
 - **Search/geocoding:** Nominatim (respect its usage policy: debounce, attribution, max 1 req/s), wrapped behind one module so it can be swapped.
-- **AI:** Worker endpoint `POST /ai` with `{ system, messages }`, header `X-App-Token`. OpenRouter Chat Completions; default model `openai/gpt-4o-mini`, overridable with the `MODEL` variable in Cloudflare. Validate AI action JSON with zod.
-- **Worker secrets** (Cloudflare only, never in the repo): `OPENROUTER_API_KEY`, `APP_TOKEN`.
+- **AI:** Worker endpoint `POST /ai` with `{ system, messages }`. Auth: the user's Google access token (`Authorization: Bearer`, verified by the Worker with Google's tokeninfo: `aud` must be `GOOGLE_CLIENT_ID`; optional `ALLOWED_EMAILS`), or the admin `X-App-Token`. Normal users never enter a key. OpenRouter Chat Completions; default model `openai/gpt-4o-mini`, overridable with the `MODEL` variable in Cloudflare. Validate AI action JSON with zod.
+- **Worker secrets** (Cloudflare only, never in the repo): `OPENROUTER_API_KEY`, `APP_TOKEN` (optional admin key). Worker vars: `GOOGLE_CLIENT_ID` (set by CI from the GitHub variable), optional `ALLOWED_EMAILS` (dashboard; `keep_vars` preserves it).
 - **State:** Zustand: `useMapStore` (doc + undo/redo history, selection, tool) and `useUi` (panel, dialogs, toasts, focus requests). Undo/redo = snapshots of the immutable MapDoc.
 
 ## Code map

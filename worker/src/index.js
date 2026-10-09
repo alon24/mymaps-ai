@@ -7,7 +7,7 @@ const MAX_MESSAGES = 50
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, X-App-Token',
+  'Access-Control-Allow-Headers': 'Content-Type, X-App-Token, Authorization',
   'Access-Control-Max-Age': '86400',
 }
 
@@ -29,6 +29,55 @@ async function tokenMatches(given, expected) {
     crypto.subtle.digest('SHA-256', enc.encode(expected)),
   ])
   return crypto.subtle.timingSafeEqual(a, b)
+}
+
+/*
+ * Google sign-in as an alternative to APP_TOKEN: the app sends the user's Google access token
+ * (Authorization: Bearer ...). It is accepted only if Google says it was issued to our OAuth
+ * client (GOOGLE_CLIENT_ID). While the OAuth app is in "Testing", Google only issues tokens to
+ * the listed test users. ALLOWED_EMAILS (comma separated) optionally narrows it further.
+ * Results are cached per token for a few minutes to avoid a Google round trip per request.
+ */
+const authCache = new Map()
+const AUTH_TTL = 5 * 60_000
+
+async function googleUserAllowed(token, env) {
+  if (!token || !env.GOOGLE_CLIENT_ID) return false
+  const hit = authCache.get(token)
+  if (hit && hit.until > Date.now()) return hit.ok
+  let ok = false
+  let ttl = 60_000
+  const info = await fetch(`https://oauth2.googleapis.com/tokeninfo?access_token=${encodeURIComponent(token)}`)
+  if (info.ok) {
+    const t = await info.json()
+    ok = t.aud === env.GOOGLE_CLIENT_ID || t.azp === env.GOOGLE_CLIENT_ID
+    ttl = Math.min(Math.max(Number(t.expires_in) || 0, 0) * 1000, AUTH_TTL)
+    const allowed = (env.ALLOWED_EMAILS || '')
+      .split(',')
+      .map((e) => e.trim().toLowerCase())
+      .filter(Boolean)
+    if (ok && allowed.length) {
+      // drive.file tokens carry no email claim; Drive's "about" returns the account's address
+      const about = await fetch('https://www.googleapis.com/drive/v3/about?fields=user(emailAddress)', {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const email = about.ok ? String((await about.json())?.user?.emailAddress || '').toLowerCase() : ''
+      ok = allowed.includes(email)
+    }
+  }
+  if (authCache.size > 1000) authCache.clear()
+  authCache.set(token, { ok, until: Date.now() + ttl })
+  return ok
+}
+
+function bearer(request) {
+  const m = /^Bearer\s+(.+)$/i.exec(request.headers.get('Authorization') || '')
+  return m ? m[1].trim() : ''
+}
+
+async function authorized(request, env) {
+  if (await tokenMatches(request.headers.get('X-App-Token'), env.APP_TOKEN)) return true
+  return googleUserAllowed(bearer(request), env)
 }
 
 async function handleKml(url) {
@@ -105,12 +154,9 @@ export default {
   async fetch(request, env) {
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS })
 
-    if (!(await tokenMatches(request.headers.get('X-App-Token'), env.APP_TOKEN))) {
-      return error('unauthorized', 401)
-    }
-
     const url = new URL(request.url)
     try {
+      if (!(await authorized(request, env))) return error('unauthorized', 401)
       if (url.pathname === '/kml' && request.method === 'GET') return await handleKml(url)
       if (url.pathname === '/ai' && request.method === 'POST') return await handleAi(request, env)
     } catch {

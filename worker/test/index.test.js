@@ -160,3 +160,68 @@ describe('POST /ai', () => {
     expect(res.status).toBe(500)
   })
 })
+
+describe('Google sign-in auth', () => {
+  const genv = { OPENROUTER_API_KEY: 'sk-test', GOOGLE_CLIENT_ID: 'cid.apps.googleusercontent.com' }
+  let n = 0
+  // A fresh token per test so the per-token cache never leaks between tests
+  const gReq = (path, init = {}) => {
+    const headers = new Headers(init.headers)
+    headers.set('Authorization', `Bearer g-${++n}`)
+    return new Request(`https://worker.test${path}`, { ...init, headers })
+  }
+  const aiCall = () =>
+    gReq('/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(goodAiBody) })
+
+  function google({ aud = genv.GOOGLE_CLIENT_ID, valid = true, email = 'ilan@example.com' } = {}) {
+    return mockFetch(async (input) => {
+      const url = String(input instanceof Request ? input.url : input)
+      if (url.startsWith('https://oauth2.googleapis.com/tokeninfo')) {
+        return valid ? Response.json({ aud, azp: aud, expires_in: '3500', scope: 'https://www.googleapis.com/auth/drive.file' }) : Response.json({ error: 'invalid_token' }, { status: 400 })
+      }
+      if (url.startsWith('https://www.googleapis.com/drive/v3/about')) return Response.json({ user: { emailAddress: email } })
+      return completion('{"reply":"ok"}')
+    })
+  }
+
+  it('accepts a Google token issued to our client, without an app token', async () => {
+    google()
+    const res = await worker.fetch(aiCall(), genv)
+    expect(res.status).toBe(200)
+  })
+
+  it('rejects tokens issued to another app, invalid tokens, and when GOOGLE_CLIENT_ID is unset', async () => {
+    google({ aud: 'someone-else' })
+    expect((await worker.fetch(aiCall(), genv)).status).toBe(401)
+    vi.restoreAllMocks()
+    google({ valid: false })
+    expect((await worker.fetch(aiCall(), genv)).status).toBe(401)
+    vi.restoreAllMocks()
+    const f = google()
+    expect((await worker.fetch(aiCall(), { ...genv, GOOGLE_CLIENT_ID: undefined })).status).toBe(401)
+    expect(f).not.toHaveBeenCalled()
+  })
+
+  it('applies ALLOWED_EMAILS when set', async () => {
+    google({ email: 'Ilan@Example.com' })
+    expect((await worker.fetch(aiCall(), { ...genv, ALLOWED_EMAILS: 'ilan@example.com, friend@example.com' })).status).toBe(200)
+    vi.restoreAllMocks()
+    google({ email: 'stranger@example.com' })
+    expect((await worker.fetch(aiCall(), { ...genv, ALLOWED_EMAILS: 'ilan@example.com' })).status).toBe(401)
+  })
+
+  it('checks a token with Google once, then uses the cache', async () => {
+    const f = google()
+    const headers = { 'Content-Type': 'application/json', Authorization: 'Bearer cached-token' }
+    const call = () => new Request('https://worker.test/ai', { method: 'POST', headers, body: JSON.stringify(goodAiBody) })
+    await worker.fetch(call(), genv)
+    await worker.fetch(call(), genv)
+    const checks = f.mock.calls.filter(([u]) => String(u).includes('tokeninfo'))
+    expect(checks).toHaveLength(1)
+  })
+
+  it('allows the Authorization header in CORS preflight', async () => {
+    const res = await worker.fetch(new Request('https://worker.test/ai', { method: 'OPTIONS' }), genv)
+    expect(res.headers.get('Access-Control-Allow-Headers')).toContain('Authorization')
+  })
+})

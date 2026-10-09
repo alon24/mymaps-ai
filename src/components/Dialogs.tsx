@@ -703,7 +703,7 @@ function SettingsDialog() {
       </label>
       {!valid && <p className="error">הכתובת צריכה להתחיל ב-https://</p>}
       <label className="field">
-        <span>APP_TOKEN</span>
+        <span>APP_TOKEN {driveEnabled() ? '(לא חובה, משתמשים מחוברים עם Google לא צריכים)' : ''}</span>
         <input type="password" value={s.appToken} onChange={(e) => setS({ ...s, appToken: e.target.value })} autoComplete="off" dir="ltr" />
       </label>
       <div className="row">

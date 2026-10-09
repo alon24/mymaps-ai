@@ -124,12 +124,13 @@ Priority: **P0** = v1 must, **P1** = v1 should, **P2** = later.
 - P0 The assistant answers questions and may propose **actions**; actions are validated (schema), shown as a readable preview, and applied only when the user taps Apply, as one undo step.
 - P0 Supported actions: create layer with places (by search query — geocoded by the app, never raw AI coordinates — or copies of existing features), update features (name, description, color, icon), move features to a layer (creating it if needed), delete features, set layer style / color / trip day, reorder a layer's stops, highlight features (no change).
 - P0 Quick prompts: summarize map, split into trip days, suggest places near the map / near me, write short descriptions.
-- P0 Clear setup message when the Worker URL / token are missing; errors shown in the chat.
+- P0 **No per-user key.** Users signed in with Google use the AI on the owner's OpenRouter account: the app sends their Google access token and the Worker verifies with Google that it was issued to this app (and, if `ALLOWED_EMAILS` is set, that the account is listed). While the OAuth app is in Testing, only Google test users can sign in at all. Signed-out users see "Sign in with Google" in the AI tab. The owner can still use an admin `APP_TOKEN`.
+- P0 Clear setup message when the Worker URL is missing; errors shown in the chat.
 - P1 Model switch without code change (Cloudflare `MODEL` variable); default `openai/gpt-4o-mini` via OpenRouter.
 - P2 Decision-only engine (e.g. TypeSafe Jev) for cheap classification once available.
 
 ### 4.10 Settings
-- P0 Worker URL and app token (stored locally); default Worker URL from build config.
+- P0 Worker URL (default from build config) and an optional admin app token (stored locally).
 - P1 Default base layer, units.
 
 ## 5. Non-functional requirements
@@ -138,7 +139,7 @@ Priority: **P0** = v1 must, **P1** = v1 should, **P2** = later.
 - **Performance**: 1,000 features render and pan smoothly on a mid-range phone; app shell loads < 2 s on 4G after first visit.
 - **Offline**: app shell and opened maps available offline; tiles for viewed areas cached (bounded cache); edits queue to Drive when back online.
 - **Accessibility**: keyboard reachable controls, visible focus, labels on icon buttons, 4.5:1 text contrast, touch targets ≥ 44px.
-- **Privacy & security**: no backend DB; maps live in IndexedDB and the user's Drive. AI requests send map content to OpenRouter through the Worker; the Worker requires an app token, holds the only API key, limits body size. No secrets in the repo or bundle. `drive.file` scope only.
+- **Privacy & security**: no backend DB; maps live in IndexedDB and the user's Drive. AI requests send map content to OpenRouter through the Worker; the Worker requires a verified Google sign-in for this app (or the admin token), holds the only API key, limits body size. No secrets in the repo or bundle. `drive.file` scope only.
 - **Cost**: GitHub Pages and Cloudflare free tiers; AI cost ≈ cents per day of use with gpt-4o-mini. Nominatim within its usage policy (≤ 1 req/s, attribution).
 - **Quality**: end-to-end tests (Playwright, desktop + phone viewport) for scenarios 1–3 and 7; unit tests for all import/export, model operations, itinerary math, AI action validation/application, Drive sync logic; CI runs tests and build on every push; deploy only from green `main`.
 
@@ -154,7 +155,7 @@ Order of `layer.features` is the sequence order (numbers, itinerary, route). `Ma
 
 ## 7. Architecture
 - Frontend: React + TypeScript + Vite + vite-plugin-pwa, Leaflet + Leaflet-Geoman (chosen over MapLibre: simpler editing on touch, raster tiles are enough, smaller learning curve), Zustand store with undo history, IndexedDB via `idb`.
-- Worker (Cloudflare): `POST /ai` → OpenRouter, `GET /kml?mid=` → My Maps KML proxy. Token-protected.
+- Worker (Cloudflare): `POST /ai` → OpenRouter, `GET /kml?mid=` → My Maps KML proxy. Protected by Google sign-in (tokeninfo `aud` check, cached) or admin token.
 - Google: Identity Services token client + Drive REST v3 + Picker, from the browser.
 - Hosting: GitHub Pages via GitHub Actions; Worker deploy via Actions when `CLOUDFLARE_API_TOKEN` is set.
 

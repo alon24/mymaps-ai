@@ -26,8 +26,11 @@
 4. ב-Cloudflare → Workers → `mymaps-ai-worker` → **Settings → Variables and Secrets** → הוסף שני סודות (Secret):
    - `OPENROUTER_API_KEY` — מ-[openrouter.ai/settings/keys](https://openrouter.ai/settings/keys)
    - `APP_TOKEN` — סיסמה ארוכה שאתה ממציא
-5. באפליקציה: תפריט → **הגדרות** → כתובת ה-Worker ו-APP_TOKEN → **בדוק חיבור**.
-   (אפשר גם להגדיר משתנה `VITE_WORKER_URL` ב-GitHub Variables כדי שהכתובת תמולא מראש.)
+5. משתמשים לא צריכים להזין שום מפתח: מי שמחובר עם Google משתמש ב-AI על חשבון ה-OpenRouter שלך. ה-Worker מוודא מול Google שההתחברות שייכת לאפליקציה הזו (דורש את חלק 2 — Google Drive).
+   - כל עוד אפליקציית ה-OAuth במצב Testing, רק מי שברשימת Test users יכול להתחבר.
+   - כדי להגביל לאנשים מסוימים גם אחרי פרסום: ב-Cloudflare → ה-Worker → Settings → Variables → משתנה `ALLOWED_EMAILS` (מיילים מופרדים בפסיק).
+   - `APP_TOKEN` נשאר כמפתח מנהל (אופציונלי): תפריט → הגדרות.
+   - מומלץ להגדיר תקרת הוצאה ב-OpenRouter.
 
 ### 2. Google Drive ושיתוף
 1. [console.cloud.google.com](https://console.cloud.google.com) → צור פרויקט.

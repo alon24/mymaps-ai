@@ -87,6 +87,8 @@ jobs:
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      # Public OAuth client id: lets the Worker accept users signed in with Google
+      GOOGLE_CLIENT_ID: ${{ vars.VITE_GOOGLE_CLIENT_ID }}
     steps:
       - uses: actions/checkout@v4
         if: env.CLOUDFLARE_API_TOKEN != ''
@@ -94,7 +96,13 @@ jobs:
         if: env.CLOUDFLARE_API_TOKEN != ''
         with:
           node-version-file: .nvmrc
-      - run: npm ci && npx wrangler deploy
+      - run: |
+          npm ci
+          if [ -n "$GOOGLE_CLIENT_ID" ]; then
+            npx wrangler deploy --var "GOOGLE_CLIENT_ID:$GOOGLE_CLIENT_ID"
+          else
+            npx wrangler deploy
+          fi
         if: env.CLOUDFLARE_API_TOKEN != ''
         working-directory: worker
       - run: echo "CLOUDFLARE_API_TOKEN not set — skipping Worker deploy."

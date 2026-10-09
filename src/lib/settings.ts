@@ -1,4 +1,5 @@
-import { env } from '../env'
+import { env, driveEnabled } from '../env'
+import { isSignedIn } from '../google/auth'
 
 // Same key as the previous version of the app, so saved settings carry over.
 const KEY = 'mymaps-ai.settings'
@@ -45,4 +46,19 @@ export function isValidWorkerUrl(url: string): boolean {
   }
 }
 
-export const isConfigured = (s: Settings): boolean => isValidWorkerUrl(s.workerUrl) && s.appToken.trim() !== ''
+/**
+ * How the app can reach the Worker:
+ * - 'ready': an APP_TOKEN is set (admin), or the user is signed in with Google (normal users)
+ * - 'needs-signin': Google sign-in is available but the user isn't signed in
+ * - 'needs-setup': no Worker URL, or no way to authenticate
+ */
+export type WorkerAccess = 'ready' | 'needs-signin' | 'needs-setup'
+
+export function workerAccess(s: Settings, signedIn = isSignedIn(), google = driveEnabled()): WorkerAccess {
+  if (!isValidWorkerUrl(s.workerUrl)) return 'needs-setup'
+  if (s.appToken.trim()) return 'ready'
+  if (google) return signedIn ? 'ready' : 'needs-signin'
+  return 'needs-setup'
+}
+
+export const isConfigured = (s: Settings): boolean => workerAccess(s) === 'ready'

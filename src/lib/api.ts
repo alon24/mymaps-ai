@@ -1,4 +1,5 @@
 import type { Settings } from './settings'
+import { getToken, isSignedIn } from '../google/auth'
 
 export class ApiError extends Error {
   status: number
@@ -9,16 +10,25 @@ export class ApiError extends Error {
 }
 
 async function call(settings: Settings, path: string, init: RequestInit = {}): Promise<Response> {
+  // Admin key if set; otherwise the user's Google sign-in (the Worker verifies it with Google)
+  const headers: Record<string, string> = { ...(init.headers as Record<string, string>) }
+  const appToken = settings.appToken.trim()
+  if (appToken) headers['X-App-Token'] = appToken
+  else if (isSignedIn()) headers.Authorization = `Bearer ${await getToken()}`
   let res: Response
   try {
-    res = await fetch(`${settings.workerUrl}${path}`, {
-      ...init,
-      headers: { ...(init.headers as Record<string, string>), 'X-App-Token': settings.appToken },
-    })
+    res = await fetch(`${settings.workerUrl}${path}`, { ...init, headers })
   } catch {
     throw new ApiError('לא ניתן להתחבר ל-Worker. בדוק את הכתובת בהגדרות.', 0)
   }
-  if (res.status === 401) throw new ApiError('ה-APP_TOKEN שגוי. בדוק את ההגדרות.', 401)
+  if (res.status === 401) {
+    throw new ApiError(
+      appToken
+        ? 'ה-APP_TOKEN שגוי. בדוק את ההגדרות.'
+        : 'אין הרשאה לעוזר ה-AI. התחבר שוב עם Google, או בקש מבעל האפליקציה להוסיף את החשבון שלך.',
+      401,
+    )
+  }
   if (!res.ok) {
     let msg = `שגיאה ${res.status}`
     try {
