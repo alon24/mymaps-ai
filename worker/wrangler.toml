@@ -19,4 +19,4 @@ MODEL = "openai/gpt-4o-mini"
 # sha256:<hex of the lowercased address> (hashes keep addresses out of this public repo).
 # Add someone: printf '%s' 'friend@gmail.com' | sha256sum   → append  ,sha256:<hash>
 # Empty = any Google user of this app (while in Testing: only the OAuth test users).
-ALLOWED_EMAILS = "sha256:bb92649b6d5241648bc0d2cba48ea79ea61f022fef80dc20ab6e0d1e0b7d038d"
+ALLOWED_EMAILS = "sha256:bb92649b6d5241648bc0d2cba48ea79ea61f022fef80dc20ab6e0d1e0b7d038d,sha256:eabd359b85e6fe1813bdb8e81686391e65c4877aba0afc421a4b350ddce078f5"

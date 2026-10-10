@@ -210,6 +210,20 @@ describe('Google sign-in auth', () => {
     expect((await worker.fetch(aiCall(), { ...genv, ALLOWED_EMAILS: 'ilan@example.com' })).status).toBe(401)
   })
 
+  it('uses the verified email from tokeninfo when the token has the email scope (Travel Hub)', async () => {
+    const f = mockFetch(async (input) => {
+      const url = String(input instanceof Request ? input.url : input)
+      if (url.startsWith('https://oauth2.googleapis.com/tokeninfo')) {
+        return Response.json({ aud: genv.GOOGLE_CLIENT_ID, expires_in: '3500', scope: 'openid email profile', email: 'Friend@Example.com', email_verified: 'true' })
+      }
+      if (url.startsWith('https://www.googleapis.com/drive/v3/about')) return new Response('no drive scope', { status: 403 })
+      return completion('{"reply":"ok"}')
+    })
+    expect((await worker.fetch(aiCall(), { ...genv, ALLOWED_EMAILS: 'friend@example.com' })).status).toBe(200)
+    expect(f.mock.calls.some(([u]) => String(u).includes('drive/v3/about'))).toBe(false)
+    expect((await worker.fetch(aiCall(), { ...genv, ALLOWED_EMAILS: 'ilan@example.com' })).status).toBe(401)
+  })
+
   it('matches hashed entries (sha256 of the lowercased address)', async () => {
     const hash = [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode('ilan@example.com')))]
       .map((b) => b.toString(16).padStart(2, '0'))

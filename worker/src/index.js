@@ -63,11 +63,15 @@ async function googleUserAllowed(token, env) {
       .map((e) => e.trim().toLowerCase())
       .filter(Boolean)
     if (ok && allowed.length) {
-      // drive.file tokens carry no email claim; Drive's "about" returns the account's address
-      const about = await fetch('https://www.googleapis.com/drive/v3/about?fields=user(emailAddress)', {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      const email = about.ok ? String((await about.json())?.user?.emailAddress || '').trim().toLowerCase() : ''
+      // Tokens with the email scope (Travel Hub) name a verified address; drive.file tokens (MyMaps AI)
+      // carry no email claim, so Drive's "about" returns the account's address instead
+      let email = t.email && String(t.email_verified) === 'true' ? String(t.email).trim().toLowerCase() : ''
+      if (!email) {
+        const about = await fetch('https://www.googleapis.com/drive/v3/about?fields=user(emailAddress)', {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        email = about.ok ? String((await about.json())?.user?.emailAddress || '').trim().toLowerCase() : ''
+      }
       ok = Boolean(email) && (allowed.includes(email) || allowed.includes(`sha256:${await sha256Hex(email)}`))
     }
   }
