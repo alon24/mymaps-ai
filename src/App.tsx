@@ -243,7 +243,11 @@ function useUpdateWatcher() {
     void verifyAfterUpdate().then((r) => {
       if (r?.status === 'retrying') return // navigating to the new build
       if (r?.status === 'ok') useUi.getState().showToast(`עודכן לגרסה ${APP_VERSION}`)
-      if (r?.status === 'failed') useUi.getState().showToast('הגרסה החדשה לא נטענה. סגור את האפליקציה לגמרי ופתח שוב.', { tone: 'error' })
+      if (r?.status === 'failed') {
+        // Don't immediately offer the same update again (it would also hide this message)
+        offered = r.expected
+        useUi.getState().showToast('הגרסה החדשה לא נטענה. סגור את האפליקציה לגמרי ופתח שוב.', { tone: 'error' })
+      }
       void check()
     })
     const onVisible = () => document.visibilityState === 'visible' && void check()
