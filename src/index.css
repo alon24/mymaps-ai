@@ -494,3 +494,17 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); ou
 .location__results span { color: var(--muted); font-size: 0.85rem; }
 .frow__rename { padding: 2px 4px; }
 .frow__main { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+
+/* Menu version + About */
+.menu__version { padding: 8px 12px 4px; margin-top: 4px; border-top: 1px solid var(--line); color: var(--muted); font-size: 0.8rem; }
+.about p { margin: 0 0 12px; line-height: 1.5; }
+.about__facts { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 0 0 14px; padding: 12px 14px; background: var(--raise); border-radius: 10px; }
+.about__facts dt { color: var(--muted); }
+.about__facts dd { margin: 0; font-weight: 600; overflow-wrap: anywhere; }
+.about .row { margin-bottom: 12px; }
+
+/* Phone: the ☰ menu sits in the bottom sheet, so it would open off-screen; show it as an action sheet instead */
+@media (max-width: 899px) {
+  .menu__list { position: fixed; top: auto; bottom: calc(12px + env(safe-area-inset-bottom)); inset-inline: 12px; min-width: 0; max-height: 75dvh; overflow: auto; z-index: 1500; padding: 8px; }
+  .menu__list button { padding: 12px; }
+}

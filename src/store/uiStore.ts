@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import type { Place } from '../geo/search'
 
 export type PanelTab = 'layers' | 'itinerary' | 'ai'
-export type DialogName = 'maps' | 'import' | 'export' | 'share' | 'settings' | 'conflict' | null
+export type DialogName = 'maps' | 'import' | 'export' | 'share' | 'settings' | 'conflict' | 'about' | null
 export type SyncStatus = 'local' | 'saving' | 'saved' | 'offline' | 'needs-auth' | 'error' | 'view-only'
 export type BaseLayer = 'streets' | 'satellite' | 'terrain'
 

@@ -140,3 +140,13 @@ test('back up all maps and restore them', async ({ page }) => {
   await page.locator('.backup input[type=file]').setInputFiles({ name: 'b.json', mimeType: 'application/json', buffer: readFileSync(path!) })
   await expect(page.locator('.toast')).toContainText('שוחזרו')
 })
+
+test('menu shows the version and opens About', async ({ page }) => {
+  await page.getByRole('button', { name: 'תפריט' }).click()
+  await expect(page.locator('.menu__version')).toContainText(/גרסה \d+\.\d+/)
+  await page.getByRole('menuitem', { name: /אודות/ }).click()
+  const about = page.getByRole('dialog', { name: 'אודות MyMaps AI' })
+  await expect(about).toBeVisible()
+  await expect(about.getByText('גרסה', { exact: true })).toBeVisible()
+  await expect(about.getByRole('button', { name: /בדוק עדכונים/ })).toBeVisible()
+})

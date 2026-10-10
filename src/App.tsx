@@ -16,7 +16,8 @@ import { parseHash } from './lib/appBase'
 import * as storage from './lib/storage'
 import { lastMapId, openDriveMap, openLocal, refreshCurrentFromDrive, saveToDrive, signIn, startAutosave, uploadLocalMaps, type OpenOutcome } from './lib/driveSync'
 import { driveEnabled } from './env'
-import { isSignedIn, onAuthChange, wasSignedIn } from './google/auth'
+import { isSignedIn, onAuthChange, signOut, wasSignedIn } from './google/auth'
+import { versionLabel } from './version'
 
 function useSignedIn() {
   const [signed, setSigned] = useState(isSignedIn())
@@ -83,6 +84,7 @@ function Title() {
 
 function Menu() {
   const [open, setOpen] = useState(false)
+  const signed = useSignedIn()
   const ref = useRef<HTMLDivElement>(null)
   const readOnly = useMapStore((s) => s.readOnly)
   useEffect(() => {
@@ -105,6 +107,21 @@ function Menu() {
           <li><button role="menuitem" onClick={() => go('export')}><Icon name="download" size={18} /> ייצוא</button></li>
           <li><button role="menuitem" onClick={() => go('share')}><Icon name="share" size={18} /> שיתוף{readOnly ? '' : ' ושמירה ב-Drive'}</button></li>
           <li><button role="menuitem" onClick={() => go('settings')}><Icon name="edit" size={18} /> הגדרות</button></li>
+          {driveEnabled() && (
+            <li>
+              {signed ? (
+                <button role="menuitem" onClick={() => { setOpen(false); void signOut().then(() => useUi.getState().showToast('התנתקת מ-Google')) }}>
+                  <Icon name="cloudOff" size={18} /> התנתק
+                </button>
+              ) : (
+                <button role="menuitem" onClick={() => { setOpen(false); void signIn() }}>
+                  <Icon name="cloud" size={18} /> התחבר עם Google
+                </button>
+              )}
+            </li>
+          )}
+          <li><button role="menuitem" onClick={() => go('about')}><Icon name="info" size={18} /> אודות</button></li>
+          <li className="menu__version">גרסה <bdi dir="ltr">{versionLabel()}</bdi></li>
         </ul>
       )}
     </div>

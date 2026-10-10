@@ -134,6 +134,7 @@ Priority: **P0** = v1 must, **P1** = v1 should, **P2** = later.
 
 ### 4.10 Settings
 - P0 Worker URL (default from build config) and an optional admin app token (stored locally).
+- P0 Menu: sign in / sign out with Google, About (version, commit, build time, account, *Check for updates*, credits). Version = `major.minor` from package.json + CI run number, shown at the bottom of the menu. On phones the menu opens as a bottom action sheet.
 - P1 Default base layer, units.
 
 ## 5. Non-functional requirements

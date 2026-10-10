@@ -16,6 +16,7 @@ import * as drive from '../google/drive'
 import { getToken, isSignedIn, onAuthChange, signOut } from '../google/auth'
 import { deleteDriveMap, openDriveMap, openLocal, resolveConflict, saveToDrive, signIn, uploadLocalMaps } from '../lib/driveSync'
 import type { Layer } from '../model/types'
+import { APP_COMMIT, APP_VERSION, BUILD_TIME } from '../version'
 import { Dialog, Icon } from './ui'
 
 export function Dialogs() {
@@ -40,6 +41,9 @@ export function Dialogs() {
       </Dialog>
       <Dialog open={dialog === 'conflict'} onClose={close} title="המפה שונתה במקום אחר">
         <ConflictDialog />
+      </Dialog>
+      <Dialog open={dialog === 'about'} onClose={close} title="אודות MyMaps AI">
+        <AboutDialog />
       </Dialog>
     </>
   )
@@ -767,6 +771,87 @@ function ConflictDialog() {
           דרוס עם הגרסה שלי
         </button>
       </div>
+    </div>
+  )
+}
+
+// ---------------- About ----------------
+async function checkForUpdate(): Promise<void> {
+  const ui = useUi.getState()
+  try {
+    const reg = await navigator.serviceWorker?.getRegistration()
+    if (!reg) {
+      location.reload()
+      return
+    }
+    await reg.update()
+    ui.showToast('טוען את הגרסה האחרונה…')
+    // autoUpdate activates a new worker right away; reload to run it
+    setTimeout(() => location.reload(), 800)
+  } catch {
+    location.reload()
+  }
+}
+
+function AboutDialog() {
+  const signed = useSignedIn()
+  const [email, setEmail] = useState('')
+  useEffect(() => {
+    if (!signed || !driveEnabled()) return setEmail('')
+    getToken()
+      .then((token) => drive.getUser({ token }))
+      .then((u) => setEmail(u.emailAddress ?? ''))
+      .catch(() => setEmail(''))
+  }, [signed])
+  const built = BUILD_TIME ? new Date(BUILD_TIME).toLocaleString('he-IL', { dateStyle: 'medium', timeStyle: 'short' }) : ''
+  return (
+    <div className="about">
+      <p>מפות אישיות בסגנון Google My Maps: שכבות, נקודות, קווים ואזורים, מסלולי טיול לפי ימים, ייבוא וייצוא KML, שמירה ושיתוף ב-Google Drive, ועוזר AI.</p>
+      <dl className="about__facts">
+        <dt>גרסה</dt>
+        <dd dir="ltr">{APP_VERSION}</dd>
+        {APP_COMMIT && (
+          <>
+            <dt>Commit</dt>
+            <dd dir="ltr">
+              <a href={`https://github.com/alon24/mymaps-ai/commit/${APP_COMMIT}`} target="_blank" rel="noopener noreferrer">{APP_COMMIT}</a>
+            </dd>
+          </>
+        )}
+        {built && (
+          <>
+            <dt>נבנתה</dt>
+            <dd>{built}</dd>
+          </>
+        )}
+        {driveEnabled() && (
+          <>
+            <dt>חשבון Google</dt>
+            <dd>{signed ? email || 'מחובר' : 'לא מחובר'}</dd>
+          </>
+        )}
+      </dl>
+      <div className="row row--wrap">
+        <button type="button" className="btn" onClick={() => void checkForUpdate()}>
+          <Icon name="download" size={18} /> בדוק עדכונים
+        </button>
+        {driveEnabled() &&
+          (signed ? (
+            <button type="button" className="btn" onClick={() => void signOut().then(() => useUi.getState().showToast('התנתקת מ-Google'))}>
+              <Icon name="cloudOff" size={18} /> התנתק
+            </button>
+          ) : (
+            <button type="button" className="btn btn--primary" onClick={() => void signIn()}>
+              <Icon name="cloud" size={18} /> התחבר עם Google
+            </button>
+          ))}
+      </div>
+      <p className="hint">
+        מפות: <bdi dir="ltr">© OpenStreetMap contributors · Esri · OpenTopoMap</bdi>. חיפוש: Nominatim. ספריות: Leaflet, Leaflet-Geoman. המפות נשמרות במכשיר וב-Google Drive שלך בלבד; ה-AI מקבל את תוכן המפה כדי לענות.
+      </p>
+      <p className="hint">
+        <a href="https://github.com/alon24/mymaps-ai" target="_blank" rel="noopener noreferrer">קוד המקור ב-GitHub</a>
+      </p>
     </div>
   )
 }
