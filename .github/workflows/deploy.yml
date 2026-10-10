@@ -60,10 +60,16 @@ jobs:
       - run: npm run build
         env:
           BASE_PATH: /${{ github.event.repository.name }}/
-          # Public config: Settings → Secrets and variables → Actions → Variables
-          VITE_WORKER_URL: ${{ vars.VITE_WORKER_URL }}
+          # Public config: Settings → Secrets and variables → Actions → Variables.
+          # VITE_WORKER_URL comes from .env.production; an optional VITE_WORKER_URL variable overrides it.
+          # (An unset variable would arrive as "" and wipe the .env value, hence the fallback.)
+          VITE_WORKER_URL: ${{ vars.VITE_WORKER_URL || 'https://mymaps-ai-worker.mymaps-ai-worker.workers.dev' }}
           VITE_GOOGLE_CLIENT_ID: ${{ vars.VITE_GOOGLE_CLIENT_ID }}
           VITE_GOOGLE_API_KEY: ${{ vars.VITE_GOOGLE_API_KEY }}
+      - name: Check the build has the Worker URL (AI needs it)
+        run: grep -rqF "${VITE_WORKER_URL:-https://mymaps-ai-worker.mymaps-ai-worker.workers.dev}" dist/assets || { echo "::error::Worker URL missing from the build"; exit 1; }
+        env:
+          VITE_WORKER_URL: ${{ vars.VITE_WORKER_URL }}
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
