@@ -14,22 +14,27 @@ const color = z
   .transform((v) => normalizeColor(v))
   .refine((v): v is string => Boolean(v), 'color must be #rrggbb')
 const ids = z.array(z.string()).min(1)
-const day = z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), route: z.boolean().default(true) })
+const day = z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().catch(undefined), route: z.boolean().default(true).catch(true) })
+// Optional details never sink a whole action: a bad value is just dropped
+const optColor = color.optional().catch(undefined)
+const optIcon = z.string().max(8).optional().catch(undefined)
+const optText = z.string().optional().catch(undefined)
+const optStyle = z.enum(['individual', 'uniform', 'numbered']).optional().catch(undefined)
 
 const newPlace = z.union([
   z.object({
     place: z.string().min(2).describe('search query for a real place, e.g. "Café Landwer Dizengoff Tel Aviv"'),
-    name: z.string().optional(),
-    description: z.string().optional(),
-    color: color.optional(),
-    icon: z.string().max(8).optional(),
+    name: optText,
+    description: optText,
+    color: optColor,
+    icon: optIcon,
   }),
   z.object({
     from_feature_id: z.string(),
-    name: z.string().optional(),
-    description: z.string().optional(),
-    color: color.optional(),
-    icon: z.string().max(8).optional(),
+    name: optText,
+    description: optText,
+    color: optColor,
+    icon: optIcon,
   }),
 ])
 
@@ -37,9 +42,9 @@ export const actionSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('add_layer'),
     layer_name: z.string().min(1),
-    color: color.optional(),
-    style: z.enum(['individual', 'uniform', 'numbered']).optional(),
-    day: day.optional(),
+    color: optColor,
+    style: optStyle,
+    day: day.optional().catch(undefined),
     features: z.array(newPlace).default([]),
   }),
   z.object({
@@ -53,10 +58,10 @@ export const actionSchema = z.discriminatedUnion('type', [
       .array(
         z.object({
           id: z.string(),
-          name: z.string().optional(),
-          description: z.string().optional(),
-          color: color.optional(),
-          icon: z.string().max(8).optional(),
+          name: optText,
+          description: optText,
+          color: optColor,
+          icon: optIcon,
         }),
       )
       .min(1),
@@ -67,11 +72,11 @@ export const actionSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('set_layer'),
     layer_name: z.string().min(1),
-    new_name: z.string().optional(),
-    color: color.optional(),
-    style: z.enum(['individual', 'uniform', 'numbered']).optional(),
+    new_name: optText,
+    color: optColor,
+    style: optStyle,
     day: day.nullable().optional(),
-    route: z.boolean().optional(),
+    route: z.boolean().optional().catch(undefined),
   }),
   z.object({ type: z.literal('highlight'), ids, note: z.string().optional() }),
 ])
@@ -99,6 +104,52 @@ export function extractJson(text: string): unknown {
   }
 }
 
+type Loose = Record<string, unknown>
+const isObj = (v: unknown): v is Loose => Boolean(v) && typeof v === 'object' && !Array.isArray(v)
+const str = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : undefined)
+
+/** Map the place shapes models actually produce onto {place, ...}. */
+function normalizePlace(p: unknown): unknown {
+  if (typeof p === 'string') return { place: p }
+  if (!isObj(p) || p.place || p.from_feature_id) return p
+  const query = str(p.query) ?? str(p.search) ?? str(p.address_query)
+  const name = str(p.name) ?? str(p.title)
+  const where = str(p.address) ?? [str(p.city), str(p.area)].filter(Boolean).join(', ')
+  const place = query ?? (name && where ? `${name}, ${where}` : name ?? where)
+  return place ? { ...p, place } : p
+}
+
+/** Map common field-name slips (places/layer/name) onto the schema before validating. */
+function normalizeAction(a: unknown): unknown {
+  if (!isObj(a)) return a
+  const out: Loose = { ...a }
+  if (typeof out.type === 'string') out.type = out.type.trim().toLowerCase()
+  if (out.type === 'add_layer' || out.type === 'add_places' || out.type === 'move_features' || out.type === 'reorder_layer' || out.type === 'set_layer') {
+    out.layer_name ??= str(a.layer) ?? str(a.layerName) ?? (out.type === 'set_layer' ? undefined : str(a.name))
+  }
+  if (out.type === 'add_layer' || out.type === 'add_places') {
+    const list = Array.isArray(a.features) ? a.features : Array.isArray(a.places) ? a.places : Array.isArray(a.items) ? a.items : undefined
+    if (list) out.features = list.map(normalizePlace)
+  }
+  return out
+}
+
+/** The reply says it is changing the map (Hebrew/English), e.g. "מוסיף", "הוספתי", "adding". */
+const PROMISES_CHANGE = /(מוסיף|אוסיף|הוספתי|נוסיף|הוספת|יצרתי|אצור|יוצר|מעביר|העברתי|מחקתי|אמחק|עדכנתי|אעדכן|\badd(ed|ing)?\b|\bcreat(ed|ing)\b|\bmov(ed|ing)\b|\bupdat(ed|ing)\b)/i
+
+/**
+ * True when the model should be asked again for the actions: it promised a change but sent none
+ * (a common gpt-4o-mini slip), or everything it sent failed validation.
+ */
+export function needsRepair(_userText: string, res: AiResponse): boolean {
+  if (res.actions.length) return false
+  return res.rejected > 0 || PROMISES_CHANGE.test(res.reply)
+}
+
+export const REPAIR_PROMPT =
+  'Your last reply said you would change the map, but it contained no valid "actions". Reply again with the same JSON object, ' +
+  'this time including the "actions" array exactly in the documented format (e.g. add_layer with "layer_name" and "features": [{"place": "<name, street, city>"}]). JSON only.'
+
 export function parseAiResponse(text: string): AiResponse {
   const data = extractJson(text) as { reply?: unknown; actions?: unknown } | null
   if (!data || typeof data !== 'object') return { reply: text.trim(), actions: [], rejected: 0 }
@@ -106,7 +157,7 @@ export function parseAiResponse(text: string): AiResponse {
   const actions: AiAction[] = []
   let rejected = 0
   for (const a of rawActions) {
-    const r = actionSchema.safeParse(a)
+    const r = actionSchema.safeParse(normalizeAction(a))
     if (r.success) actions.push(r.data)
     else rejected++
   }

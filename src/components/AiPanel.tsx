@@ -5,9 +5,9 @@ import { askAi, type ChatMessage } from '../lib/api'
 import { loadSettings, workerAccess } from '../lib/settings'
 import { isSignedIn, onAuthChange } from '../google/auth'
 import { signIn } from '../lib/driveSync'
-import { applyActions, describeActions, highlightedIds, parseAiResponse, type AiAction } from '../ai/actions'
+import { applyActions, describeActions, highlightedIds, needsRepair, parseAiResponse, REPAIR_PROMPT, type AiAction } from '../ai/actions'
 import { QUICK_PROMPTS, SYSTEM_PROMPT, mapContext } from '../ai/prompt'
-import { geocode } from '../geo/search'
+import { geocodeWithFallback } from '../geo/search'
 import * as ops from '../model/ops'
 import { Icon } from './ui'
 
@@ -18,6 +18,8 @@ interface Turn {
   status?: 'pending' | 'applied' | 'dismissed' | 'applying'
   rejected?: number
   notFound?: string[]
+  /** Features actually added when applied */
+  added?: number
   error?: boolean
 }
 
@@ -54,8 +56,16 @@ export function AiPanel() {
       const ui = useUi.getState()
       const context = mapContext(useMapStore.getState().doc, { center: ui.mapCenter, userLocation: ui.userLocation ?? undefined })
       const messages: ChatMessage[] = history.slice(-12).map((t) => ({ role: t.role, content: t.text }))
-      const raw = await askAi(loadSettings(), `${SYSTEM_PROMPT}\n\nCurrent map JSON:\n${context}`, messages)
-      const res = parseAiResponse(raw)
+      const system = `${SYSTEM_PROMPT}\n\nCurrent map JSON:\n${context}`
+      const raw = await askAi(loadSettings(), system, messages)
+      let res = parseAiResponse(raw)
+      // The model sometimes says "adding…" but sends no (valid) actions: ask once more for them
+      if (!readOnly && needsRepair(q, res)) {
+        const again = parseAiResponse(
+          await askAi(loadSettings(), system, [...messages, { role: 'assistant', content: raw }, { role: 'user', content: REPAIR_PROMPT }]),
+        )
+        if (again.actions.length) res = { ...again, reply: res.reply || again.reply }
+      }
       const ids = highlightedIds(res.actions)
       if (ids.length) {
         ui.setHighlights(ids)
@@ -84,10 +94,12 @@ export function AiPanel() {
     if (!turn.actions?.length) return
     setTurns((t) => t.map((x, j) => (j === i ? { ...x, status: 'applying' } : x)))
     const viewbox = useUi.getState().mapBounds ?? undefined
-    const { doc: next, notFound } = await applyActions(useMapStore.getState().doc, turn.actions, (q) => geocode(q, viewbox).catch(() => null))
+    const before = useMapStore.getState().doc
+    const { doc: next, notFound } = await applyActions(before, turn.actions, (q) => geocodeWithFallback(q, viewbox))
     useMapStore.getState().apply(() => next)
-    setTurns((t) => t.map((x, j) => (j === i ? { ...x, status: 'applied', notFound } : x)))
-    useUi.getState().showToast('השינויים הוחלו', { action: { label: 'בטל', run: () => useMapStore.getState().undo() } })
+    const added = ops.featureCount(next) - ops.featureCount(before)
+    setTurns((t) => t.map((x, j) => (j === i ? { ...x, status: 'applied', notFound, added } : x)))
+    useUi.getState().showToast(added > 0 ? `נוספו ${added} מקומות` : 'השינויים הוחלו', { action: { label: 'בטל', run: () => useMapStore.getState().undo() } })
     useUi.getState().focusOn({ all: true })
   }
 
@@ -140,6 +152,7 @@ export function AiPanel() {
                     <li key={k}>{line}</li>
                   ))}
                 </ul>
+                {t.status === 'pending' && <p className="hint">השינויים יתבצעו רק אחרי שתלחץ "החל שינויים".</p>}
                 {t.status === 'pending' && (
                   <div className="row">
                     <button type="button" className="btn btn--primary" onClick={() => apply(i)}>
@@ -151,7 +164,12 @@ export function AiPanel() {
                   </div>
                 )}
                 {t.status === 'applying' && <p className="hint">מחפש מקומות ומחיל…</p>}
-                {t.status === 'applied' && <p className="hint">הוחל.{t.notFound?.length ? ` לא נמצאו: ${t.notFound.join(', ')}` : ''}</p>}
+                {t.status === 'applied' && (
+                  <p className={t.notFound?.length ? 'error' : 'hint'}>
+                    {t.added ? `הוחל: נוספו ${t.added} מקומות.` : 'הוחל.'}
+                    {t.notFound?.length ? ` לא מצאתי במפה: ${t.notFound.join(' · ')}. נסה לבקש שוב עם שם עיר.` : ''}
+                  </p>
+                )}
                 {t.status === 'dismissed' && <p className="hint">לא הוחל.</p>}
               </div>
             )}

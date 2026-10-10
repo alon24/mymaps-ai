@@ -65,7 +65,11 @@ PLACE is either:
 - {"place":"<precise search query for a REAL place: name + street/neighborhood + city>","name"?,"description"?,"icon"?}
 - {"from_feature_id":"<existing id>","name"?,"description"?,"icon"?}   (copy an existing feature)
 
+Example — user: "הצע 3 בתי קפה ליד הים בתל אביב והוסף לשכבה חדשה":
+{"reply":"הנה 3 בתי קפה ליד הים. אשר כדי להוסיף אותם לשכבה \"בתי קפה\".","actions":[{"type":"add_layer","layer_name":"בתי קפה","features":[{"place":"Cafe Lanoir, Tel Aviv Port, Tel Aviv","name":"קפה לנואר","icon":"☕","description":"..."},{"place":"Mike's Place, Herbert Samuel St, Tel Aviv","name":"מייקס פלייס","icon":"☕"},{"place":"Gordon Beach, Tel Aviv","name":"חוף גורדון","icon":"🏖️"}]}]}
+
 Rules:
+- If your reply says you are adding/changing/moving anything, the SAME JSON must contain the matching "actions". Never promise a change without actions.
 - NEVER invent coordinates. New places are found by the app from your "place" query, so make queries specific and real.
 - Use only ids that exist in the map JSON.
 - Trip days: one layer per day, "day" set, style "numbered"; stops in visiting order. To split places into days use add_layer for each day plus move_features, and order stops geographically to minimize backtracking.

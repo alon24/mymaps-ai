@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { applyActions, changesMap, describeActions, extractJson, highlightedIds, parseAiResponse } from './actions'
+import { applyActions, changesMap, describeActions, extractJson, highlightedIds, needsRepair, parseAiResponse, type AiAction } from './actions'
 import { mapContext } from './prompt'
 import * as ops from '../model/ops'
 import { tripDays } from '../model/itinerary'
@@ -117,5 +117,45 @@ describe('mapContext', () => {
     expect(ctx.layers[0].trip_day).toEqual({ route: true })
     expect(ctx.layers[0].features[0]).toMatchObject({ id: a.properties.id, name: 'חוף', at: [32.08, 34.77], description: 'ים' })
     expect(ctx.map_center).toEqual([32.08, 34.78])
+  })
+})
+
+describe('lenient parsing of real-world model output', () => {
+  it('keeps an action when only an optional field is bad (e.g. color "orange")', () => {
+    const r = parseAiResponse(
+      JSON.stringify({ reply: 'מוסיף', actions: [{ type: 'add_layer', layer_name: 'הצעות', color: 'orange', features: [{ place: 'Jaffa Port, Tel Aviv', icon: 'a very long icon' }] }] }),
+    )
+    expect(r.rejected).toBe(0)
+    expect(r.actions).toHaveLength(1)
+  })
+
+  it('accepts common aliases: places/layer/name, string places, query/address', () => {
+    const r = parseAiResponse(
+      JSON.stringify({
+        reply: 'ok',
+        actions: [
+          { type: 'add_layer', name: 'הצעות', places: ['Carmel Market, Tel Aviv', { query: 'Sarona Market, Tel Aviv' }, { name: 'Jaffa Clock Tower', address: 'Yefet St, Jaffa' }] },
+          { type: 'add_places', layer: 'הצעות', features: [{ name: 'Habima Square, Tel Aviv' }] },
+        ],
+      }),
+    )
+    expect(r.rejected).toBe(0)
+    const [a, b] = r.actions as Extract<AiAction, { type: 'add_layer' | 'add_places' }>[]
+    expect(a.layer_name).toBe('הצעות')
+    expect(a.features.map((f) => ('place' in f ? f.place : ''))).toEqual(['Carmel Market, Tel Aviv', 'Sarona Market, Tel Aviv', 'Jaffa Clock Tower, Yefet St, Jaffa'])
+    expect(b.layer_name).toBe('הצעות')
+    expect('place' in b.features[0] && b.features[0].place).toBe('Habima Square, Tel Aviv')
+  })
+})
+
+describe('needsRepair', () => {
+  it('asks again when the reply promises changes but no valid actions came', () => {
+    expect(needsRepair('הצע 5 מקומות והוסף לשכבה', { reply: 'בסדר, מוסיף 5 מקומות לשכבה החדשה', actions: [], rejected: 0 })).toBe(true)
+    expect(needsRepair('add places', { reply: 'Adding them now', actions: [], rejected: 0 })).toBe(true)
+    expect(needsRepair('x', { reply: '', actions: [], rejected: 2 })).toBe(true)
+  })
+  it('does not retry questions or replies that already carry actions', () => {
+    expect(needsRepair('כמה נקודות יש?', { reply: 'יש 3 נקודות', actions: [], rejected: 0 })).toBe(false)
+    expect(needsRepair('הוסף', { reply: 'מוסיף', actions: [{ type: 'highlight', ids: ['a'] }], rejected: 0 })).toBe(false)
   })
 })

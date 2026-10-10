@@ -141,6 +141,9 @@ async function handleAi(request, env) {
     },
     body: JSON.stringify({
       model: env.MODEL || DEFAULT_MODEL,
+      // The app always expects one JSON object back; providers that can't enforce it ignore this
+      response_format: { type: 'json_object' },
+      temperature: 0.4,
       messages: [
         { role: 'system', content: body.system },
         ...body.messages.map(({ role, content }) => ({ role, content })),

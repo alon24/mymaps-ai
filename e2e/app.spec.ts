@@ -150,3 +150,30 @@ test('menu shows the version and opens About', async ({ page }) => {
   await expect(about.getByText('גרסה', { exact: true })).toBeVisible()
   await expect(about.getByRole('button', { name: /בדוק עדכונים/ })).toBeVisible()
 })
+
+test('AI promised places but sent no actions: the app asks again, then adds them', async ({ page }) => {
+  await page.evaluate(() => localStorage.setItem('mymaps-ai.settings', JSON.stringify({ workerUrl: `${location.origin}/__worker`, appToken: 't' })))
+  await page.reload()
+  // Geocoding is mocked: every query resolves near Tel Aviv
+  await page.unroute(/tile\.openstreetmap|arcgisonline|opentopomap|fonts\.(googleapis|gstatic)|nominatim/)
+  await page.route(/tile\.openstreetmap|arcgisonline|opentopomap|fonts\.(googleapis|gstatic)/, (r) => r.abort())
+  let n = 0
+  await page.route(/nominatim/, (r) => r.fulfill({ json: [{ lat: String(32.07 + n++ * 0.004), lon: '34.77', name: 'מקום', display_name: 'מקום, תל אביב' }] }))
+  const bodies: { messages: { role: string; content: string }[] }[] = []
+  await page.route('**/__worker/ai', async (route) => {
+    bodies.push(route.request().postDataJSON())
+    const content =
+      bodies.length === 1
+        ? JSON.stringify({ reply: 'בסדר, מוסיף 2 מקומות לשכבה החדשה "הצעות".' })
+        : JSON.stringify({ reply: 'הנה', actions: [{ type: 'add_layer', layer_name: 'הצעות', features: [{ place: 'Carmel Market, Tel Aviv' }, { place: 'Jaffa Port, Tel Aviv' }] }] })
+    await route.fulfill({ json: { choices: [{ message: { role: 'assistant', content } }] } })
+  })
+  await page.getByRole('tab', { name: /AI/ }).click()
+  await page.getByLabel('הודעה לעוזר').fill('הצע 2 מקומות והוסף לשכבה חדשה')
+  await page.getByRole('button', { name: 'שלח' }).click()
+  await expect(page.locator('.proposal li')).toHaveText([/שכבה חדשה "הצעות" עם 2 מקומות/])
+  expect(bodies).toHaveLength(2)
+  expect(bodies[1].messages.at(-1)!.content).toContain('no valid "actions"')
+  await page.getByRole('button', { name: /החל שינויים/ }).click()
+  await expect(page.locator('.proposal')).toContainText('נוספו 2 מקומות', { timeout: 10_000 })
+})

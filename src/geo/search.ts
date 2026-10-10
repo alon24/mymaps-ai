@@ -75,6 +75,27 @@ export async function geocode(query: string, viewbox?: SearchOptions['viewbox'])
   return first ?? null
 }
 
+/**
+ * Geocode a model-written query, loosening it step by step: within the map view, then anywhere,
+ * then just "<first part>, <last part>" (drops street details models often get slightly wrong).
+ */
+export async function geocodeWithFallback(
+  query: string,
+  viewbox?: SearchOptions['viewbox'],
+  find: (q: string, vb?: SearchOptions['viewbox']) => Promise<Place | null> = geocode,
+): Promise<Place | null> {
+  const parts = query.split(',').map((p) => p.trim()).filter(Boolean)
+  const tries: [string, SearchOptions['viewbox'] | undefined][] = []
+  if (viewbox) tries.push([query, viewbox])
+  tries.push([query, undefined])
+  if (parts.length > 2) tries.push([`${parts[0]}, ${parts[parts.length - 1]}`, undefined])
+  for (const [q, vb] of tries) {
+    const hit = await find(q, vb).catch(() => null)
+    if (hit) return hit
+  }
+  return null
+}
+
 /** "31.77, 35.23" or "31.77 35.23" → coordinates (lat, lng order, as people paste them). */
 export function parseCoordinates(text: string): { lat: number; lng: number } | null {
   const m = text.trim().match(/^(-?\d{1,2}(?:\.\d+)?)[,\s]+(-?\d{1,3}(?:\.\d+)?)$/)
