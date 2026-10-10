@@ -177,3 +177,16 @@ test('AI promised places but sent no actions: the app asks again, then adds them
   await page.getByRole('button', { name: /החל שינויים/ }).click()
   await expect(page.locator('.proposal')).toContainText('נוספו 2 מקומות', { timeout: 10_000 })
 })
+
+test('AI sends no actions twice: the app says nothing was added and offers a retry', async ({ page }) => {
+  await page.evaluate(() => localStorage.setItem('mymaps-ai.settings', JSON.stringify({ workerUrl: `${location.origin}/__worker`, appToken: 't' })))
+  await page.reload()
+  await page.route('**/__worker/ai', (route) =>
+    route.fulfill({ json: { choices: [{ message: { role: 'assistant', content: JSON.stringify({ reply: 'הנה 5 מקומות מומלצים: א, ב, ג' }) } }] } }),
+  )
+  await page.getByRole('tab', { name: /AI/ }).click()
+  await page.getByLabel('הודעה לעוזר').fill('הצע 5 מקומות והוסף אותם לשכבה חדשה')
+  await page.getByRole('button', { name: 'שלח' }).click()
+  await expect(page.getByText('ה-AI לא שלח שינויים שאפשר להחיל')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'נסה שוב' })).toBeVisible()
+})

@@ -20,6 +20,10 @@ interface Turn {
   notFound?: string[]
   /** Features actually added when applied */
   added?: number
+  /** The model was asked for changes twice and sent none */
+  missing?: boolean
+  raw?: string
+  ask?: string
   error?: boolean
 }
 
@@ -55,16 +59,24 @@ export function AiPanel() {
     try {
       const ui = useUi.getState()
       const context = mapContext(useMapStore.getState().doc, { center: ui.mapCenter, userLocation: ui.userLocation ?? undefined })
-      const messages: ChatMessage[] = history.slice(-12).map((t) => ({ role: t.role, content: t.text }))
+      // Earlier assistant turns go back as the JSON they were, actions included; sending only the text
+      // teaches the model (in-context) to answer with text and no actions.
+      const messages: ChatMessage[] = history.slice(-12).map((t) => ({
+        role: t.role,
+        content: t.role === 'assistant' && t.actions?.length ? JSON.stringify({ reply: t.text, actions: t.actions }) : t.text,
+      }))
       const system = `${SYSTEM_PROMPT}\n\nCurrent map JSON:\n${context}`
       const raw = await askAi(loadSettings(), system, messages)
       let res = parseAiResponse(raw)
       // The model sometimes says "adding…" but sends no (valid) actions: ask once more for them
+      const raws = [raw]
+      let missing = false
       if (!readOnly && needsRepair(q, res)) {
-        const again = parseAiResponse(
-          await askAi(loadSettings(), system, [...messages, { role: 'assistant', content: raw }, { role: 'user', content: REPAIR_PROMPT }]),
-        )
+        const raw2 = await askAi(loadSettings(), system, [...messages, { role: 'assistant', content: raw }, { role: 'user', content: REPAIR_PROMPT }])
+        raws.push(raw2)
+        const again = parseAiResponse(raw2)
         if (again.actions.length) res = { ...again, reply: res.reply || again.reply }
+        else missing = true
       }
       const ids = highlightedIds(res.actions)
       if (ids.length) {
@@ -80,6 +92,7 @@ export function AiPanel() {
           actions: readOnly ? [] : editable,
           status: editable.length && !readOnly ? 'pending' : undefined,
           rejected: res.rejected,
+          ...(missing ? { missing: true, raw: raws.join('\n\n— ניסיון שני —\n\n'), ask: q } : {}),
         },
       ])
     } catch (e) {
@@ -173,7 +186,21 @@ export function AiPanel() {
                 {t.status === 'dismissed' && <p className="hint">לא הוחל.</p>}
               </div>
             )}
-            {!!t.rejected && <p className="hint">{t.rejected} פעולות לא תקינות סוננו.</p>}
+            {!!t.rejected && !t.missing && <p className="hint">{t.rejected} פעולות לא תקינות סוננו.</p>}
+            {t.missing && (
+              <div className="proposal proposal--missing">
+                <p className="error">ה-AI לא שלח שינויים שאפשר להחיל, ולכן שום דבר לא נוסף למפה.</p>
+                <div className="row">
+                  <button type="button" className="btn btn--small" disabled={busy} onClick={() => t.ask && void send(t.ask)}>
+                    נסה שוב
+                  </button>
+                </div>
+                <details>
+                  <summary>מה ה-AI החזיר (לבדיקה)</summary>
+                  <pre dir="ltr">{t.raw?.slice(0, 3000)}</pre>
+                </details>
+              </div>
+            )}
           </div>
         ))}
         {busy && <div className="msg msg--assistant msg--typing" aria-label="חושב">…</div>}

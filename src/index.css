@@ -508,3 +508,6 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); ou
   .menu__list { position: fixed; top: auto; bottom: calc(12px + env(safe-area-inset-bottom)); inset-inline: 12px; min-width: 0; max-height: 75dvh; overflow: auto; z-index: 1500; padding: 8px; }
   .menu__list button { padding: 12px; }
 }
+
+.proposal--missing details { margin-top: 6px; font-size: 0.8rem; }
+.proposal--missing pre { white-space: pre-wrap; word-break: break-word; max-height: 220px; overflow: auto; background: var(--raise); padding: 8px; border-radius: 8px; margin: 6px 0 0; }

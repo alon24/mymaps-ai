@@ -141,19 +141,24 @@ const PROMISES_CHANGE = /(מוסיף|אוסיף|הוספתי|נוסיף|הוספ
  * True when the model should be asked again for the actions: it promised a change but sent none
  * (a common gpt-4o-mini slip), or everything it sent failed validation.
  */
-export function needsRepair(_userText: string, res: AiResponse): boolean {
+export function needsRepair(userText: string, res: AiResponse): boolean {
   if (res.actions.length) return false
-  return res.rejected > 0 || PROMISES_CHANGE.test(res.reply)
+  return res.rejected > 0 || PROMISES_CHANGE.test(res.reply) || ASKS_CHANGE.test(userText)
 }
+
+/** The user asked to change the map, e.g. "הוסף", "תוסיף", "חלק לימים", "add", "move". */
+export const ASKS_CHANGE = /(הוסף|תוסיף|תוסיפי|להוסיף|צור|תיצור|ליצור|העבר|תעביר|חלק|תחלק|סדר|תסדר|מחק|תמחק|שנה|תשנה|עדכן|תעדכן|כתוב תיאור|\badd\b|\bcreate\b|\bmove\b|\bsplit\b|\bdelete\b|\brename\b|\bupdate\b)/i
 
 export const REPAIR_PROMPT =
   'Your last reply said you would change the map, but it contained no valid "actions". Reply again with the same JSON object, ' +
   'this time including the "actions" array exactly in the documented format (e.g. add_layer with "layer_name" and "features": [{"place": "<name, street, city>"}]). JSON only.'
 
 export function parseAiResponse(text: string): AiResponse {
-  const data = extractJson(text) as { reply?: unknown; actions?: unknown } | null
+  const data = extractJson(text) as { reply?: unknown; actions?: unknown; action?: unknown; changes?: unknown } | null
   if (!data || typeof data !== 'object') return { reply: text.trim(), actions: [], rejected: 0 }
-  const rawActions = Array.isArray(data.actions) ? data.actions : []
+  // Models sometimes send one action object, or use "action"/"changes"
+  const list = data.actions ?? data.action ?? data.changes
+  const rawActions = Array.isArray(list) ? list : isObj(list) ? [list] : []
   const actions: AiAction[] = []
   let rejected = 0
   for (const a of rawActions) {

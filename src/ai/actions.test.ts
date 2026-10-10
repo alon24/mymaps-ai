@@ -153,9 +153,21 @@ describe('needsRepair', () => {
     expect(needsRepair('הצע 5 מקומות והוסף לשכבה', { reply: 'בסדר, מוסיף 5 מקומות לשכבה החדשה', actions: [], rejected: 0 })).toBe(true)
     expect(needsRepair('add places', { reply: 'Adding them now', actions: [], rejected: 0 })).toBe(true)
     expect(needsRepair('x', { reply: '', actions: [], rejected: 2 })).toBe(true)
+    // the reply doesn't promise anything, but the user clearly asked for a change
+    expect(needsRepair('הצע 5 מקומות והוסף אותם לשכבה חדשה', { reply: 'הנה 5 מקומות מומלצים: …', actions: [], rejected: 0 })).toBe(true)
   })
   it('does not retry questions or replies that already carry actions', () => {
     expect(needsRepair('כמה נקודות יש?', { reply: 'יש 3 נקודות', actions: [], rejected: 0 })).toBe(false)
+    expect(needsRepair('מה הכי קרוב לים?', { reply: 'החוף הכי קרוב', actions: [], rejected: 0 })).toBe(false)
     expect(needsRepair('הוסף', { reply: 'מוסיף', actions: [{ type: 'highlight', ids: ['a'] }], rejected: 0 })).toBe(false)
+  })
+})
+
+describe('action container shapes', () => {
+  it('accepts a single action object, or "action"/"changes" keys', () => {
+    const one = { type: 'add_layer', layer_name: 'הצעות', features: [{ place: 'Jaffa Port, Tel Aviv' }] }
+    expect(parseAiResponse(JSON.stringify({ reply: 'x', actions: one })).actions).toHaveLength(1)
+    expect(parseAiResponse(JSON.stringify({ reply: 'x', action: one })).actions).toHaveLength(1)
+    expect(parseAiResponse(JSON.stringify({ reply: 'x', changes: [one] })).actions).toHaveLength(1)
   })
 })
