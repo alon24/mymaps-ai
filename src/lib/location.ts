@@ -38,7 +38,8 @@ export function startTracking(opts: { center?: boolean; quiet?: boolean } = {}):
     },
     (err) => {
       stopTracking()
-      if (quiet && err.code !== err.PERMISSION_DENIED) return
+      // Automatic start: stay silent (the user just answered the prompt, or GPS is off); the locate button explains
+      if (quiet) return
       useUi
         .getState()
         .showToast(err.code === err.PERMISSION_DENIED ? 'אין הרשאת מיקום. אפשר אותה בהגדרות הדפדפן (סמל המנעול ליד הכתובת).' : 'לא ניתן לקבל מיקום כרגע.', { tone: 'error' })
