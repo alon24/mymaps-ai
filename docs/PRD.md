@@ -134,6 +134,9 @@ Priority: **P0** = v1 must, **P1** = v1 should, **P2** = later.
 
 ### 4.10 Settings
 - P0 Worker URL (default from build config) and an optional admin app token (stored locally).
+- P0 **Updates that really update**: each deploy publishes `version.json`. *Check for updates* (About) and a background check (startup / back to foreground, ≤ every 15 min) read it from the server with no cache; if newer, the app drops its service worker + caches (map tiles kept), reloads a cache-busting URL and verifies the new version is running (one automatic retry, then a clear message). Never "updates" to an older build.
+- P0 **GPS on phones**: location tracking starts at launch on touch devices (permission prompt the first time; skipped if denied), so the blue dot, distances, navigation and the AI's "near me" work without extra taps.
+- P0 AI place suggestions: only real, named places; places that can't be found are listed; no empty or duplicate layers are created; addresses are geocoded without the name as a fallback.
 - P0 Menu: sign in / sign out with Google, About (version, commit, build time, account, *Check for updates*, credits). Version = `major.minor` from package.json + CI run number, shown at the bottom of the menu. On phones the menu opens as a bottom action sheet.
 - P1 Default base layer, units.
 

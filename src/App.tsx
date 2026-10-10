@@ -18,6 +18,9 @@ import { lastMapId, openDriveMap, openLocal, refreshCurrentFromDrive, saveToDriv
 import { driveEnabled } from './env'
 import { isSignedIn, onAuthChange, signOut, wasSignedIn } from './google/auth'
 import { versionLabel } from './version'
+import { autoLocate } from './lib/location'
+import { installLatest, isDevBuild, isNewer, latestVersion, verifyAfterUpdate } from './lib/update'
+import { APP_VERSION } from './version'
 
 function useSignedIn() {
   const [signed, setSigned] = useState(isSignedIn())
@@ -221,6 +224,34 @@ function AccessGate({ outcome, retry }: { outcome: OpenOutcome; retry: (o: { int
 
 let startupSynced = false
 
+/**
+ * Finish an update that was in progress, then keep an eye on the server's version.json
+ * (at startup and when the app comes back to the foreground, at most every 15 minutes).
+ */
+function useUpdateWatcher() {
+  useEffect(() => {
+    let lastCheck = 0
+    let offered = ''
+    const check = async () => {
+      if (isDevBuild() || Date.now() - lastCheck < 15 * 60_000) return
+      lastCheck = Date.now()
+      const latest = await latestVersion()
+      if (!latest || !isNewer(latest, APP_VERSION) || offered === latest) return
+      offered = latest
+      useUi.getState().showToast(`יש גרסה חדשה (${latest})`, { action: { label: 'עדכן', run: () => void installLatest(latest) } })
+    }
+    void verifyAfterUpdate().then((r) => {
+      if (r?.status === 'retrying') return // navigating to the new build
+      if (r?.status === 'ok') useUi.getState().showToast(`עודכן לגרסה ${APP_VERSION}`)
+      if (r?.status === 'failed') useUi.getState().showToast('הגרסה החדשה לא נטענה. סגור את האפליקציה לגמרי ופתח שוב.', { tone: 'error' })
+      void check()
+    })
+    const onVisible = () => document.visibilityState === 'visible' && void check()
+    document.addEventListener('visibilitychange', onVisible)
+    return () => document.removeEventListener('visibilitychange', onVisible)
+  }, [])
+}
+
 const SNAPS = ['peek', 'half', 'full'] as const
 
 /**
@@ -290,6 +321,11 @@ export default function App() {
   const [ready, setReady] = useState(false)
 
   useEffect(() => startAutosave(), [])
+  useUpdateWatcher()
+  // Phones: GPS on from the start (permission prompt the first time)
+  useEffect(() => {
+    void autoLocate({ centerIfEmpty: ops.featureCount(useMapStore.getState().doc) === 0 })
+  }, [])
   useEffect(() => {
     void storage.requestPersistence()
   }, [])

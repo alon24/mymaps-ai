@@ -171,3 +171,21 @@ describe('action container shapes', () => {
     expect(parseAiResponse(JSON.stringify({ reply: 'x', changes: [one] })).actions).toHaveLength(1)
   })
 })
+
+describe('add_layer safety', () => {
+  const add = { type: 'add_layer' as const, layer_name: 'הצעות', features: [{ place: 'Fake Steakhouse, Nowhere' }] }
+  it('creates no empty layer when none of the places are found', async () => {
+    const doc = ops.createMap('t')
+    const r = await applyActions(doc, [add], async () => null)
+    expect(r.doc.layers.map((l) => l.name)).not.toContain('הצעות')
+    expect(r.notFound).toEqual(['Fake Steakhouse, Nowhere'])
+  })
+  it('adds to an existing layer with the same name instead of duplicating it', async () => {
+    const doc = ops.createMap('t')
+    const found = async () => ({ lat: 31.9, lng: 34.8, name: 'x' })
+    const once = (await applyActions(doc, [add], found)).doc
+    const twice = (await applyActions(once, [add], found)).doc
+    expect(twice.layers.filter((l) => l.name === 'הצעות')).toHaveLength(1)
+    expect(twice.layers.find((l) => l.name === 'הצעות')!.features).toHaveLength(2)
+  })
+})

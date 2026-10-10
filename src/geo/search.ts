@@ -75,6 +75,22 @@ export async function geocode(query: string, viewbox?: SearchOptions['viewbox'])
   return first ?? null
 }
 
+const STREET_PREFIX = /^(רחוב|רח'|רח׳|שדרות|שד'|שד׳)\s+/
+
+/**
+ * Looser forms of "<name>, <street> <no>, <city>": as written, then the address without the
+ * name (models often attach a name OSM doesn't know to a real address), then "<name>, <city>".
+ */
+export function queryVariants(query: string): string[] {
+  const parts = query.split(',').map((p) => p.trim()).filter(Boolean)
+  const out = [query.trim()]
+  if (parts.length >= 3) {
+    out.push(parts.slice(1).map((p) => p.replace(STREET_PREFIX, '')).join(', '))
+    out.push(`${parts[0]}, ${parts[parts.length - 1]}`)
+  }
+  return [...new Set(out)]
+}
+
 /**
  * Geocode a model-written query, loosening it step by step: within the map view, then anywhere,
  * then just "<first part>, <last part>" (drops street details models often get slightly wrong).
@@ -84,11 +100,11 @@ export async function geocodeWithFallback(
   viewbox?: SearchOptions['viewbox'],
   find: (q: string, vb?: SearchOptions['viewbox']) => Promise<Place | null> = geocode,
 ): Promise<Place | null> {
-  const parts = query.split(',').map((p) => p.trim()).filter(Boolean)
   const tries: [string, SearchOptions['viewbox'] | undefined][] = []
-  if (viewbox) tries.push([query, viewbox])
-  tries.push([query, undefined])
-  if (parts.length > 2) tries.push([`${parts[0]}, ${parts[parts.length - 1]}`, undefined])
+  for (const q of queryVariants(query)) {
+    if (viewbox) tries.push([q, viewbox])
+    tries.push([q, undefined])
+  }
   for (const [q, vb] of tries) {
     const hit = await find(q, vb).catch(() => null)
     if (hit) return hit

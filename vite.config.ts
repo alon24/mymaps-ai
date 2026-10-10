@@ -30,6 +30,13 @@ export default defineConfig({
   },
   plugins: [
     react(),
+    // /version.json: the latest deployed version, read by "Check for updates" straight from the server
+    {
+      name: 'version-json',
+      generateBundle() {
+        this.emitFile({ type: 'asset', fileName: 'version.json', source: JSON.stringify({ version: appVersion, commit }) })
+      },
+    },
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg'],

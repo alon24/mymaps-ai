@@ -17,6 +17,7 @@ import { getToken, isSignedIn, onAuthChange, signOut } from '../google/auth'
 import { deleteDriveMap, openDriveMap, openLocal, resolveConflict, saveToDrive, signIn, uploadLocalMaps } from '../lib/driveSync'
 import type { Layer } from '../model/types'
 import { APP_COMMIT, APP_VERSION, BUILD_TIME } from '../version'
+import { checkForUpdate } from '../lib/update'
 import { Dialog, Icon } from './ui'
 
 export function Dialogs() {
@@ -776,21 +777,31 @@ function ConflictDialog() {
 }
 
 // ---------------- About ----------------
-async function checkForUpdate(): Promise<void> {
-  const ui = useUi.getState()
-  try {
-    const reg = await navigator.serviceWorker?.getRegistration()
-    if (!reg) {
-      location.reload()
-      return
-    }
-    await reg.update()
-    ui.showToast('טוען את הגרסה האחרונה…')
-    // autoUpdate activates a new worker right away; reload to run it
-    setTimeout(() => location.reload(), 800)
-  } catch {
-    location.reload()
-  }
+function UpdateButton() {
+  const [state, setState] = useState<'idle' | 'checking' | 'latest' | 'offline'>('idle')
+  const [latest, setLatest] = useState('')
+  return (
+    <>
+      <button
+        type="button"
+        className="btn"
+        disabled={state === 'checking'}
+        onClick={async () => {
+          setState('checking')
+          const r = await checkForUpdate()
+          if (r.status === 'updating') useUi.getState().showToast(`מעדכן לגרסה ${r.latest}…`)
+          else {
+            setState(r.status === 'latest' ? 'latest' : 'offline')
+            setLatest(r.latest ?? '')
+          }
+        }}
+      >
+        <Icon name="download" size={18} /> {state === 'checking' ? 'בודק…' : 'בדוק עדכונים'}
+      </button>
+      {state === 'latest' && <p className="hint about__status">אתה בגרסה האחרונה ({latest}).</p>}
+      {state === 'offline' && <p className="error about__status">אין חיבור לשרת. נסה שוב כשיש אינטרנט.</p>}
+    </>
+  )
 }
 
 function AboutDialog() {
@@ -832,9 +843,7 @@ function AboutDialog() {
         )}
       </dl>
       <div className="row row--wrap">
-        <button type="button" className="btn" onClick={() => void checkForUpdate()}>
-          <Icon name="download" size={18} /> בדוק עדכונים
-        </button>
+        <UpdateButton />
         {driveEnabled() &&
           (signed ? (
             <button type="button" className="btn" onClick={() => void signOut().then(() => useUi.getState().showToast('התנתקת מ-Google'))}>

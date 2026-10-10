@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { haversine, pathLength, polygonArea, formatDistance, formatArea, anchor } from './measure'
-import { buildSearchUrl, parseCoordinates, geocodeWithFallback } from './search'
+import { buildSearchUrl, parseCoordinates, geocodeWithFallback, queryVariants } from './search'
 
 describe('measure', () => {
   it('computes distances (Tel Aviv → Jerusalem ≈ 54 km)', () => {
@@ -54,6 +54,17 @@ describe('geocodeWithFallback', () => {
     }
     const hit = await geocodeWithFallback('Jaffa Clock Tower, Yefet St 1, Tel Aviv', [34, 31, 35, 33], find)
     expect(hit?.lat).toBe(32.05)
-    expect(calls).toEqual(['Jaffa Clock Tower, Yefet St 1, Tel Aviv|view', 'Jaffa Clock Tower, Yefet St 1, Tel Aviv|any', 'Jaffa Clock Tower, Tel Aviv|any'])
+    expect(calls).toEqual([
+      'Jaffa Clock Tower, Yefet St 1, Tel Aviv|view',
+      'Jaffa Clock Tower, Yefet St 1, Tel Aviv|any',
+      'Yefet St 1, Tel Aviv|view',
+      'Yefet St 1, Tel Aviv|any',
+      'Jaffa Clock Tower, Tel Aviv|view',
+    ])
+  })
+
+  it('falls back to the address without the made-up name', () => {
+    expect(queryVariants('מסעדת בשרים, רחוב הרצל 10, רחובות')).toEqual(['מסעדת בשרים, רחוב הרצל 10, רחובות', 'הרצל 10, רחובות', 'מסעדת בשרים, רחובות'])
+    expect(queryVariants('Jaffa Port, Tel Aviv')).toEqual(['Jaffa Port, Tel Aviv'])
   })
 })

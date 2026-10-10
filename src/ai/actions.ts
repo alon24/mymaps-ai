@@ -262,8 +262,16 @@ export async function applyActions(doc: MapDoc, actions: AiAction[], geocode: Ge
   for (const a of actions) {
     switch (a.type) {
       case 'add_layer': {
+        // Same name as an existing layer (e.g. a retry): add there instead of duplicating it
+        const existing = findLayer(d, a.layer_name)
+        if (existing) {
+          for (const f of await resolvePlaces(d, a.features, geocode, existing.color, notFound)) d = ops.addFeature(d, existing.id, f)
+          break
+        }
         const layerColor = a.color ?? ops.nextLayerColor(d)
         const features = await resolvePlaces(d, a.features, geocode, layerColor, notFound)
+        // Asked for places but none were found: don't leave an empty layer behind
+        if (a.features.length && !features.length) break
         d = ops.addLayer(
           d,
           ops.createLayer(a.layer_name, features, {

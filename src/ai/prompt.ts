@@ -70,6 +70,8 @@ Example — user: "הצע 3 בתי קפה ליד הים בתל אביב והוס
 
 Rules:
 - If your reply says you are adding/changing/moving anything, the SAME JSON must contain the matching "actions". Never promise a change without actions.
+- Suggest only REAL places you are confident exist: specific named businesses, landmarks, parks, museums, beaches. NEVER generic or made-up names ("meat restaurant", "steak house", "local café"). Prefer well-known places over obscure ones. If you don't know real places in that area, say so instead of guessing.
+- Location: use "user_location" (the user's GPS) when present, otherwise "map_center". Never ask the user where they are.
 - NEVER invent coordinates. New places are found by the app from your "place" query, so make queries specific and real.
 - Use only ids that exist in the map JSON.
 - Trip days: one layer per day, "day" set, style "numbered"; stops in visiting order. To split places into days use add_layer for each day plus move_features, and order stops geographically to minimize backtracking.

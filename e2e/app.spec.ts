@@ -190,3 +190,21 @@ test('AI sends no actions twice: the app says nothing was added and offers a ret
   await expect(page.getByText('ה-AI לא שלח שינויים שאפשר להחיל')).toBeVisible()
   await expect(page.getByRole('button', { name: 'נסה שוב' })).toBeVisible()
 })
+
+test('Check for updates reads the server version; a stale build never loops forever', async ({ page }) => {
+  await page.route('**/version.json*', (r) => r.fulfill({ json: { version: '9.9.9' } }))
+  await page.getByRole('button', { name: 'תפריט' }).click()
+  await page.getByRole('menuitem', { name: /אודות/ }).click()
+  await page.getByRole('button', { name: /בדוק עדכונים/ }).click()
+  // The served build stays old here: after one automatic retry the app stops and says so
+  await expect(page.getByText('הגרסה החדשה לא נטענה')).toBeVisible({ timeout: 15_000 })
+  expect(new URL(page.url()).searchParams.has('v')).toBe(false)
+})
+
+test('Check for updates says when already on the latest version', async ({ page }) => {
+  await page.route('**/version.json*', (r) => r.fulfill({ json: { version: '1.0.0' } }))
+  await page.getByRole('button', { name: 'תפריט' }).click()
+  await page.getByRole('menuitem', { name: /אודות/ }).click()
+  await page.getByRole('button', { name: /בדוק עדכונים/ }).click()
+  await expect(page.getByText(/אתה בגרסה האחרונה/)).toBeVisible()
+})
