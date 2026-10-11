@@ -345,9 +345,17 @@ export default function App() {
 
   // Routing: #/m/<driveFileId>?f=<featureId> opens a Drive map, #/import/<data> adds a linked map; otherwise the last local map.
   useEffect(() => {
-    const route = async () => {
-      const r = parseHash(window.location.hash)
-      const linked = readImportHash(window.location.hash)
+    // Route changes run one after another: a link that arrives while the first load is still
+    // running must not be overwritten when that load finishes. The hash is read when the event fires:
+    // the earlier load rewrites the address bar (setHash) and would wipe a #/import/… link otherwise.
+    let chain = Promise.resolve()
+    const route = (e?: Event) => {
+      const hash = e instanceof HashChangeEvent ? new URL(e.newURL).hash : window.location.hash
+      chain = chain.then(() => run(hash)).catch(() => undefined)
+    }
+    const run = async (hash: string) => {
+      const r = parseHash(hash)
+      const linked = readImportHash(hash)
       if (linked) {
         // A map handed over by Travel Hub (#/import/…): save it as a local map and open it
         try {
