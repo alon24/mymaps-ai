@@ -1,14 +1,16 @@
 /**
  * Google Identity Services (token model) + Google Picker, loaded on demand.
- * The access token lives in memory only; a silent re-request happens when it expires.
+ * The access token is kept until it expires. Signing in to any app of the travel suite signs in here too (suite.ts).
  */
 import { env, driveEnabled } from '../env'
 import { DRIVE_SCOPE } from './drive'
+import { dropFromSuite, readSuite, shareWithSuite, SUITE_SCOPE } from './suite'
 
 /* Minimal typings for the bits of the Google globals we use. */
 interface TokenResponse {
   access_token?: string
   expires_in?: number
+  scope?: string
   error?: string
 }
 interface TokenClient {
@@ -54,7 +56,7 @@ function loadScript(src: string): Promise<void> {
 
 let client: TokenClient | null = null
 const SIGNED_IN_HINT = 'mymaps-ai.google-signed-in'
-/** Short-lived access token (drive.file only), kept so a reload doesn't force a new sign-in. */
+/** Short-lived access token, kept so a reload doesn't force a new sign-in. */
 const TOKEN_KEY = 'mymaps-ai.google-token'
 const listeners = new Set<(signedIn: boolean) => void>()
 
@@ -62,10 +64,13 @@ type Token = { value: string; expires: number }
 function restoreToken(): Token | null {
   try {
     const t = JSON.parse(localStorage.getItem(TOKEN_KEY) ?? 'null') as Token | null
-    return t && typeof t.value === 'string' && t.expires > Date.now() + 60_000 ? t : null
+    if (t && typeof t.value === 'string' && t.expires > Date.now() + 60_000) return t
   } catch {
-    return null
+    /* below */
   }
+  // Signed in to another app of the suite with Drive access: use that sign-in
+  const s = readSuite()
+  return s?.scopes?.includes(DRIVE_SCOPE) ? { value: s.token, expires: s.expires } : null
 }
 let token: Token | null = restoreToken()
 let expiryTimer: ReturnType<typeof setTimeout> | undefined
@@ -104,7 +109,7 @@ async function getClient(): Promise<TokenClient> {
   await loadScript('https://accounts.google.com/gsi/client')
   client ??= window.google!.accounts.oauth2.initTokenClient({
     client_id: env.VITE_GOOGLE_CLIENT_ID,
-    scope: DRIVE_SCOPE,
+    scope: SUITE_SCOPE,
     callback: () => undefined,
   })
   return client
@@ -133,7 +138,9 @@ export async function getToken(interactive = false): Promise<string> {
       } catch {
         /* ignore */
       }
-      setToken({ value: r.access_token, expires: Date.now() + (r.expires_in ?? 3600) * 1000 })
+      const expires = Date.now() + (r.expires_in ?? 3600) * 1000
+      setToken({ value: r.access_token, expires })
+      void shareWithSuite(r.access_token, expires, r.scope ?? SUITE_SCOPE).catch(() => undefined)
       resolve(r.access_token)
     }
     c.error_callback = (e) => reject(new Error(e.type === 'popup_closed' ? 'חלון ההתחברות נסגר' : 'ההתחברות ל-Google נכשלה'))
@@ -143,6 +150,7 @@ export async function getToken(interactive = false): Promise<string> {
 
 export async function signOut(): Promise<void> {
   const t = token?.value
+  if (t) dropFromSuite(t)
   try {
     localStorage.removeItem(SIGNED_IN_HINT)
   } catch {

@@ -36,7 +36,7 @@
 ### 2. Google Drive ושיתוף
 1. [console.cloud.google.com](https://console.cloud.google.com) → צור פרויקט.
 2. **APIs & Services → Library** → הפעל **Google Drive API** ו-**Google Picker API**.
-3. **OAuth consent screen** → External → מלא שם אפליקציה ומייל → Scopes: הוסף `.../auth/drive.file` → Test users: הוסף את המייל שלך (ושל מי שתשתף איתו), או Publish.
+3. **OAuth consent screen** → External → מלא שם אפליקציה ומייל → Scopes: הוסף `.../auth/drive.file` (וגם `openid`, `email`, `profile`) → Test users: הוסף את המייל שלך (ושל מי שתשתף איתו), או Publish.
 4. **Credentials → Create credentials → OAuth client ID** → Web application → Authorized JavaScript origins: `https://alon24.github.io` (ולפיתוח: `http://localhost:5173`). העתק את ה-Client ID.
 5. **Credentials → Create credentials → API key** → Restrict key: HTTP referrers `https://alon24.github.io/*`, APIs: Drive + Picker. העתק.
 6. ב-GitHub: **Settings → Secrets and variables → Actions → Variables** → הוסף `VITE_GOOGLE_CLIENT_ID` ו-`VITE_GOOGLE_API_KEY` → הרץ שוב את ה-workflow.
