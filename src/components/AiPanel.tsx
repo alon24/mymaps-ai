@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { useMapStore } from '../store/mapStore'
 import { useUi } from '../store/uiStore'
-import { askAi, type ChatMessage } from '../lib/api'
+import { askAiStep, type ChatMessage, type ToolCallMessage } from '../lib/api'
+import { describeCall, MAX_TOOL_STEPS, runTool, TOOLS } from '../ai/tools'
+import { CATEGORIES, type PlaceResult } from '../geo/places'
 import { loadSettings, workerAccess } from '../lib/settings'
 import { isSignedIn, onAuthChange } from '../google/auth'
 import { signIn } from '../lib/driveSync'
@@ -10,6 +12,14 @@ import { QUICK_PROMPTS, SYSTEM_PROMPT, mapContext } from '../ai/prompt'
 import { geocodeWithFallback } from '../geo/search'
 import * as ops from '../model/ops'
 import { Icon } from './ui'
+
+/** search_places results → what applyActions needs: position, name, an icon and a useful default note. */
+const lookupResult = (registry: Map<string, PlaceResult>) => (id: string) => {
+  const r = registry.get(id)
+  if (!r) return undefined
+  const note = [r.cuisine && `מטבח: ${r.cuisine}`, r.opening_hours && `שעות: ${r.opening_hours}`, r.website].filter(Boolean).join('\n')
+  return { lat: r.lat, lng: r.lng, name: r.name, description: note, icon: r.category ? CATEGORIES[r.category as keyof typeof CATEGORIES]?.icon : undefined }
+}
 
 interface Turn {
   role: 'user' | 'assistant'
@@ -44,9 +54,14 @@ export function AiPanel() {
     endRef.current?.scrollIntoView({ block: 'end', behavior: 'smooth' })
   }, [turns.length, busy])
 
+  // Places found by search_places during this conversation, by result id
+  const registryRef = useRef(new Map<string, PlaceResult>())
+  const [progress, setProgress] = useState('')
+
   // Start a fresh conversation when another map is opened
   useEffect(() => {
     setTurns([])
+    registryRef.current = new Map()
   }, [doc.id])
 
   async function send(text: string) {
@@ -66,13 +81,32 @@ export function AiPanel() {
         content: t.role === 'assistant' && t.actions?.length ? JSON.stringify({ reply: t.text, actions: t.actions }) : t.text,
       }))
       const system = `${SYSTEM_PROMPT}\n\nCurrent map JSON:\n${context}`
-      const raw = await askAi(loadSettings(), system, messages)
+      // The model may search real places first (search_places); the app runs each search and sends
+      // the results back, up to MAX_TOOL_STEPS rounds, then the model answers with its JSON
+      const convo: ToolCallMessage[] = [...messages]
+      const toolCtx = { mapCenter: ui.mapCenter, userLocation: ui.userLocation, registry: registryRef.current }
+      let raw = ''
+      for (let step = 0; ; step++) {
+        const r = await askAiStep(loadSettings(), system, convo, TOOLS)
+        if (!r.tool_calls) {
+          raw = r.content ?? ''
+          break
+        }
+        convo.push({ role: 'assistant', content: r.content, tool_calls: r.tool_calls })
+        for (const c of r.tool_calls) {
+          setProgress(describeCall(c))
+          const result = step < MAX_TOOL_STEPS ? await runTool(c, toolCtx) : JSON.stringify({ error: 'search limit reached: answer now with the final JSON' })
+          convo.push({ role: 'tool', tool_call_id: c.id, content: result })
+        }
+        setProgress('')
+      }
       let res = parseAiResponse(raw)
       // The model sometimes says "adding…" but sends no (valid) actions: ask once more for them
       const raws = [raw]
       let missing = false
       if (!readOnly && needsRepair(q, res)) {
-        const raw2 = await askAi(loadSettings(), system, [...messages, { role: 'assistant', content: raw }, { role: 'user', content: REPAIR_PROMPT }])
+        const raw2 =
+          (await askAiStep(loadSettings(), system, [...convo, { role: 'assistant', content: raw }, { role: 'user', content: REPAIR_PROMPT }], TOOLS)).content ?? ''
         raws.push(raw2)
         const again = parseAiResponse(raw2)
         if (again.actions.length) res = { ...again, reply: res.reply || again.reply }
@@ -99,6 +133,7 @@ export function AiPanel() {
       setTurns((t) => [...t, { role: 'assistant', text: e instanceof Error ? e.message : 'משהו השתבש', error: true }])
     } finally {
       setBusy(false)
+      setProgress('')
     }
   }
 
@@ -108,7 +143,7 @@ export function AiPanel() {
     setTurns((t) => t.map((x, j) => (j === i ? { ...x, status: 'applying' } : x)))
     const viewbox = useUi.getState().mapBounds ?? undefined
     const before = useMapStore.getState().doc
-    const { doc: next, notFound } = await applyActions(before, turn.actions, (q) => geocodeWithFallback(q, viewbox))
+    const { doc: next, notFound } = await applyActions(before, turn.actions, (q) => geocodeWithFallback(q, viewbox), lookupResult(registryRef.current))
     useMapStore.getState().apply(() => next)
     const added = ops.featureCount(next) - ops.featureCount(before)
     setTurns((t) => t.map((x, j) => (j === i ? { ...x, status: 'applied', notFound, added } : x)))
@@ -203,7 +238,11 @@ export function AiPanel() {
             )}
           </div>
         ))}
-        {busy && <div className="msg msg--assistant msg--typing" aria-label="חושב">…</div>}
+        {busy && (
+          <div className="msg msg--assistant msg--typing" aria-label="חושב">
+            {progress || '…'}
+          </div>
+        )}
         <div ref={endRef} />
       </div>
       <form

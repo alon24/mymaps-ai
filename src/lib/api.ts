@@ -64,6 +64,31 @@ export interface ChatMessage {
   content: string
 }
 
+/** Messages of a tool round trip (the AI asks the app to search, the app answers). */
+export type ToolCallMessage =
+  | ChatMessage
+  | { role: 'assistant'; content: string | null; tool_calls: { id: string; type?: 'function'; function: { name: string; arguments: string } }[] }
+  | { role: 'tool'; tool_call_id: string; content: string }
+
+export interface AiStep {
+  content: string | null
+  tool_calls?: { id: string; type?: 'function'; function: { name: string; arguments: string } }[]
+}
+
+/** One model turn that may ask for tools instead of answering. */
+export async function askAiStep(settings: Settings, system: string, messages: ToolCallMessage[], tools?: unknown[]): Promise<AiStep> {
+  const res = await call(settings, '/ai', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ system, messages, ...(tools?.length ? { tools } : {}) }),
+  })
+  const data = (await res.json()) as { choices?: { message?: { content?: unknown; tool_calls?: AiStep['tool_calls'] } }[] }
+  const m = data?.choices?.[0]?.message
+  const calls = Array.isArray(m?.tool_calls) && m.tool_calls.length ? m.tool_calls : undefined
+  if (typeof m?.content !== 'string' && !calls) throw new ApiError('תשובה לא צפויה מה-AI', 502)
+  return { content: typeof m?.content === 'string' ? m.content : null, ...(calls ? { tool_calls: calls } : {}) }
+}
+
 export async function askAi(settings: Settings, system: string, messages: ChatMessage[]): Promise<string> {
   const res = await call(settings, '/ai', {
     method: 'POST',

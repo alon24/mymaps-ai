@@ -30,6 +30,13 @@ const newPlace = z.union([
     icon: optIcon,
   }),
   z.object({
+    result_id: z.string().min(3).describe('a result_id returned by search_places'),
+    name: optText,
+    description: optText,
+    color: optColor,
+    icon: optIcon,
+  }),
+  z.object({
     from_feature_id: z.string(),
     name: optText,
     description: optText,
@@ -111,7 +118,10 @@ const str = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : unde
 /** Map the place shapes models actually produce onto {place, ...}. */
 function normalizePlace(p: unknown): unknown {
   if (typeof p === 'string') return { place: p }
-  if (!isObj(p) || p.place || p.from_feature_id) return p
+  if (!isObj(p) || p.place || p.from_feature_id || p.result_id) return p
+  // a search result referenced by its id under another key
+  const rid = [p.id, p.ref, p.resultId].find((v) => typeof v === 'string' && /^(osm|nominatim):/.test(v))
+  if (rid) return { ...p, result_id: rid }
   const query = str(p.query) ?? str(p.search) ?? str(p.address_query)
   const name = str(p.name) ?? str(p.title)
   const where = str(p.address) ?? [str(p.city), str(p.area)].filter(Boolean).join(', ')
@@ -200,6 +210,9 @@ export function describeActions(doc: MapDoc, actions: AiAction[]): string[] {
 
 export type Geocoder = (query: string) => Promise<{ lat: number; lng: number; name: string } | null>
 
+/** A place the app found earlier (search_places), by result id. */
+export type ResultLookup = (id: string) => { lat: number; lng: number; name: string; description?: string; icon?: string } | undefined
+
 export interface ApplyResult {
   doc: MapDoc
   /** Place queries that could not be found */
@@ -224,9 +237,24 @@ async function resolvePlaces(
   geocode: Geocoder,
   defaultColor: string,
   notFound: string[],
+  lookup?: ResultLookup,
 ): Promise<MapFeature[]> {
   const out: MapFeature[] = []
   for (const p of places) {
+    if ('result_id' in p) {
+      const hit = lookup?.(p.result_id)
+      if (!hit) {
+        notFound.push(p.name ?? p.result_id)
+        continue
+      }
+      out.push(
+        ops.createFeature(
+          { type: 'Point', coordinates: [hit.lng, hit.lat] },
+          { name: p.name ?? hit.name, description: p.description ?? hit.description ?? '', color: p.color ?? defaultColor, icon: validIcon(p.icon) ?? hit.icon },
+        ),
+      )
+      continue
+    }
     if ('from_feature_id' in p) {
       const src = ops.findFeature(doc, p.from_feature_id)?.feature
       if (!src) continue
@@ -256,7 +284,7 @@ async function resolvePlaces(
 }
 
 /** Apply validated actions to a document. Pure apart from the injected geocoder. */
-export async function applyActions(doc: MapDoc, actions: AiAction[], geocode: Geocoder): Promise<ApplyResult> {
+export async function applyActions(doc: MapDoc, actions: AiAction[], geocode: Geocoder, lookup?: ResultLookup): Promise<ApplyResult> {
   let d = doc
   const notFound: string[] = []
   for (const a of actions) {
@@ -265,11 +293,11 @@ export async function applyActions(doc: MapDoc, actions: AiAction[], geocode: Ge
         // Same name as an existing layer (e.g. a retry): add there instead of duplicating it
         const existing = findLayer(d, a.layer_name)
         if (existing) {
-          for (const f of await resolvePlaces(d, a.features, geocode, existing.color, notFound)) d = ops.addFeature(d, existing.id, f)
+          for (const f of await resolvePlaces(d, a.features, geocode, existing.color, notFound, lookup)) d = ops.addFeature(d, existing.id, f)
           break
         }
         const layerColor = a.color ?? ops.nextLayerColor(d)
-        const features = await resolvePlaces(d, a.features, geocode, layerColor, notFound)
+        const features = await resolvePlaces(d, a.features, geocode, layerColor, notFound, lookup)
         // Asked for places but none were found: don't leave an empty layer behind
         if (a.features.length && !features.length) break
         d = ops.addLayer(
@@ -286,7 +314,7 @@ export async function applyActions(doc: MapDoc, actions: AiAction[], geocode: Ge
         const r = ensureLayer(d, a.layer_name)
         d = r.doc
         const layer = d.layers.find((l) => l.id === r.layerId)!
-        for (const f of await resolvePlaces(d, a.features, geocode, layer.color ?? PALETTE[0], notFound)) d = ops.addFeature(d, r.layerId, f)
+        for (const f of await resolvePlaces(d, a.features, geocode, layer.color ?? PALETTE[0], notFound, lookup)) d = ops.addFeature(d, r.layerId, f)
         break
       }
       case 'update_features':

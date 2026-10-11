@@ -285,3 +285,48 @@ test('settings show the AI connection check', async ({ page }) => {
   const dlg = page.getByRole('dialog', { name: 'הגדרות' })
   await expect(dlg.getByRole('button', { name: 'בדוק חיבור' })).toBeVisible()
 })
+
+test('AI searches real places (OSM), picks one by id, and it lands where OSM says', async ({ page }) => {
+  await page.evaluate(() => localStorage.setItem('mymaps-ai.settings', JSON.stringify({ workerUrl: `${location.origin}/__worker`, appToken: 't' })))
+  await page.reload()
+  await page.route('https://overpass-api.de/**', (r) =>
+    r.fulfill({ json: { elements: [{ type: 'node', id: 77, lat: 31.8961, lon: 34.8105, tags: { name: 'Real Cafe', amenity: 'cafe', opening_hours: 'Mo-Su 08:00-20:00' } }] } }),
+  )
+  const bodies: { messages: { role: string; content: string | null }[]; tools?: unknown[] }[] = []
+  await page.route('**/__worker/ai', async (route) => {
+    const body = route.request().postDataJSON()
+    bodies.push(body)
+    const message =
+      bodies.length === 1
+        ? { role: 'assistant', content: null, tool_calls: [{ id: 'c1', type: 'function', function: { name: 'search_places', arguments: '{"category":"cafe","near":"map"}' } }] }
+        : { role: 'assistant', content: JSON.stringify({ reply: 'מצאתי בית קפה', actions: [{ type: 'add_layer', layer_name: 'קפה', features: [{ result_id: 'osm:node/77', icon: '☕' }] }] }) }
+    await route.fulfill({ json: { choices: [{ message }] } })
+  })
+  await page.getByRole('tab', { name: /AI/ }).click()
+  await page.getByLabel('הודעה לעוזר').fill('הצע בית קפה באזור והוסף לשכבה')
+  await page.getByRole('button', { name: 'שלח' }).click()
+  await expect(page.locator('.proposal li')).toHaveText([/שכבה חדשה "קפה" עם 1 מקומות/])
+  // the search result went back to the model as a tool message
+  expect(bodies[1].messages.at(-1)).toMatchObject({ role: 'tool' })
+  expect(String(bodies[1].messages.at(-1)!.content)).toContain('Real Cafe')
+  expect(bodies[0].tools).toBeTruthy()
+  await page.getByRole('button', { name: /החל שינויים/ }).click()
+  await expect(page.locator('.proposal')).toContainText('נוספו 1 מקומות')
+  // saved (debounced) to IndexedDB at the coordinates OSM returned, not anything from the model
+  const saved = () =>
+    page.evaluate(async () => {
+      const db = await new Promise<IDBDatabase>((res) => {
+        const r = indexedDB.open('mymaps-ai')
+        r.onsuccess = () => res(r.result)
+      })
+      const store = db.objectStoreNames[0]
+      const maps = await new Promise<{ layers: { name: string; features: { geometry: { coordinates: number[] }; properties: { name: string } }[] }[] }[]>((res) => {
+        const r = db.transaction(store).objectStore(store).getAll()
+        r.onsuccess = () => res(r.result)
+      })
+      return maps.flatMap((m) => m.layers).find((l) => l.name === 'קפה')?.features[0] ?? null
+    })
+  await expect.poll(async () => (await saved())?.geometry.coordinates).toEqual([34.8105, 31.8961])
+  const coords = await saved()
+  expect(coords?.properties.name).toBe('Real Cafe')
+})
