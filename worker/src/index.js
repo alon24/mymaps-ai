@@ -1,3 +1,5 @@
+import { addUser, audit, listUsers, readAudit, removeUser, roleFor, usage } from './accounts.js'
+
 export const DEFAULT_MODEL = 'qwen/qwen3.5-plus-20260420'
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions'
 const MID_RE = /^[A-Za-z0-9_-]{10,100}$/
@@ -6,8 +8,8 @@ const MAX_MESSAGES = 50
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, X-App-Token, Authorization',
+  'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, X-App-Token, Authorization, X-App',
   'Access-Control-Max-Age': '86400',
 }
 
@@ -34,50 +36,40 @@ async function tokenMatches(given, expected) {
 /*
  * Google sign-in as an alternative to APP_TOKEN: the app sends the user's Google access token
  * (Authorization: Bearer ...). It is accepted only if Google says it was issued to our OAuth
- * client (GOOGLE_CLIENT_ID). While the OAuth app is in "Testing", Google only issues tokens to
- * the listed test users. ALLOWED_EMAILS (comma separated) optionally narrows it further; each entry
- * is an address or `sha256:<hex of the lowercased address>` (keeps addresses out of the public repo).
- * Results are cached per token for a few minutes to avoid a Google round trip per request.
+ * client (GOOGLE_CLIENT_ID). Who may then use the apps, and as what role, is decided by roleFor()
+ * (src/accounts.js): ADMIN_EMAILS, the shared users database, then ALLOWED_EMAILS.
+ * The token -> email lookup is cached for a few minutes to avoid a Google round trip per request;
+ * the role is read fresh each time, so removing a user takes effect at once.
  */
 const authCache = new Map()
 const AUTH_TTL = 5 * 60_000
 
-async function sha256Hex(text) {
-  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text))
-  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('')
-}
-
-async function googleUserAllowed(token, env) {
-  if (!token || !env.GOOGLE_CLIENT_ID) return false
+async function googleEmail(token, env) {
+  if (!token || !env.GOOGLE_CLIENT_ID) return null
   const hit = authCache.get(token)
-  if (hit && hit.until > Date.now()) return hit.ok
-  let ok = false
+  if (hit && hit.until > Date.now()) return hit.email
+  let email = null
   let ttl = 60_000
   const info = await fetch(`https://oauth2.googleapis.com/tokeninfo?access_token=${encodeURIComponent(token)}`)
   if (info.ok) {
     const t = await info.json()
-    ok = t.aud === env.GOOGLE_CLIENT_ID || t.azp === env.GOOGLE_CLIENT_ID
-    ttl = Math.min(Math.max(Number(t.expires_in) || 0, 0) * 1000, AUTH_TTL)
-    const allowed = (env.ALLOWED_EMAILS || '')
-      .split(',')
-      .map((e) => e.trim().toLowerCase())
-      .filter(Boolean)
-    if (ok && allowed.length) {
+    if (t.aud === env.GOOGLE_CLIENT_ID || t.azp === env.GOOGLE_CLIENT_ID) {
+      ttl = Math.min(Math.max(Number(t.expires_in) || 0, 0) * 1000, AUTH_TTL)
       // Tokens with the email scope (Travel Hub) name a verified address; drive.file tokens (MyMaps AI)
       // carry no email claim, so Drive's "about" returns the account's address instead
-      let email = t.email && String(t.email_verified) === 'true' ? String(t.email).trim().toLowerCase() : ''
+      email = t.email && String(t.email_verified) === 'true' ? String(t.email).trim().toLowerCase() : ''
       if (!email) {
         const about = await fetch('https://www.googleapis.com/drive/v3/about?fields=user(emailAddress)', {
           headers: { Authorization: `Bearer ${token}` },
         })
         email = about.ok ? String((await about.json())?.user?.emailAddress || '').trim().toLowerCase() : ''
       }
-      ok = Boolean(email) && (allowed.includes(email) || allowed.includes(`sha256:${await sha256Hex(email)}`))
+      email ||= null
     }
   }
   if (authCache.size > 1000) authCache.clear()
-  authCache.set(token, { ok, until: Date.now() + ttl })
-  return ok
+  authCache.set(token, { email, until: Date.now() + ttl })
+  return email
 }
 
 function bearer(request) {
@@ -85,9 +77,13 @@ function bearer(request) {
   return m ? m[1].trim() : ''
 }
 
-async function authorized(request, env) {
-  if (await tokenMatches(request.headers.get('X-App-Token'), env.APP_TOKEN)) return true
-  return googleUserAllowed(bearer(request), env)
+/** Who is calling: { email, role } or null. The APP_TOKEN admin key acts as an admin. */
+async function identify(request, env) {
+  if (await tokenMatches(request.headers.get('X-App-Token'), env.APP_TOKEN)) return { email: 'app-token', role: 'admin' }
+  const email = await googleEmail(bearer(request), env)
+  if (!email) return null
+  const role = await roleFor(email, env)
+  return role ? { email, role } : null
 }
 
 async function handleKml(url) {
@@ -123,7 +119,7 @@ function validateAiBody(body) {
   return ok ? null : 'each message needs role user|assistant and string content'
 }
 
-async function handleAi(request, env) {
+async function handleAi(request, env, who) {
   const raw = await request.text()
   if (raw.length > MAX_BODY) return error('body too large', 413)
   let body
@@ -160,7 +156,34 @@ async function handleAi(request, env) {
   if (typeof data?.choices?.[0]?.message?.content !== 'string') {
     return error('unexpected response from openrouter', 502)
   }
+  const app = request.headers.get('X-App') === 'hub' ? 'hub' : 'mymaps'
+  const tokens = Number.isFinite(data?.usage?.total_tokens) ? data.usage.total_tokens : null
+  await audit(env, { email: who.email, app, action: 'ai', detail: env.MODEL || DEFAULT_MODEL, tokens })
   return json(data)
+}
+
+async function handleAdmin(request, env, who, url) {
+  if (who.role !== 'admin') return error('admins only', 403)
+  if (!env.DB) return error('the users database is not configured', 503)
+  const path = url.pathname
+  if (path === '/admin/users' && request.method === 'GET') return json({ users: await listUsers(env) })
+  if (path === '/admin/users' && request.method === 'POST') {
+    let body
+    try {
+      body = await request.json()
+    } catch {
+      return error('invalid JSON', 400)
+    }
+    const r = await addUser(env, who.email, body)
+    return r.error ? error(r.error, r.status) : json(r)
+  }
+  if (path === '/admin/users' && request.method === 'DELETE') {
+    const r = await removeUser(env, who.email, url.searchParams.get('email'))
+    return r.error ? error(r.error, r.status) : json(r)
+  }
+  if (path === '/admin/audit' && request.method === 'GET') return json({ entries: await readAudit(env, url.searchParams) })
+  if (path === '/admin/usage' && request.method === 'GET') return json(await usage(env, url.searchParams))
+  return error('not found', 404)
 }
 
 export default {
@@ -169,9 +192,12 @@ export default {
 
     const url = new URL(request.url)
     try {
-      if (!(await authorized(request, env))) return error('unauthorized', 401)
+      const who = await identify(request, env)
+      if (!who) return error('unauthorized', 401)
+      if (url.pathname === '/me' && request.method === 'GET') return json(who)
+      if (url.pathname.startsWith('/admin/')) return await handleAdmin(request, env, who, url)
       if (url.pathname === '/kml' && request.method === 'GET') return await handleKml(url)
-      if (url.pathname === '/ai' && request.method === 'POST') return await handleAi(request, env)
+      if (url.pathname === '/ai' && request.method === 'POST') return await handleAi(request, env, who)
     } catch {
       return error('upstream request failed', 502)
     }
