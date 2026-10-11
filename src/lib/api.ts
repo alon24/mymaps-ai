@@ -29,6 +29,7 @@ async function call(settings: Settings, path: string, init: RequestInit = {}): P
       401,
     )
   }
+  if (res.status === 413) throw new ApiError('המפה גדולה מדי בשביל עוזר ה-AI. הסתר שכבות או פצל את המפה ונסה שוב.', 413)
   if (res.status === 429) {
     let limit = ''
     try {

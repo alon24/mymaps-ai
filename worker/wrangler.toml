@@ -13,7 +13,9 @@ keep_vars = true
 # MODEL overrides DEFAULT_MODEL in src/index.js. Remove this block to fall back
 # to the default (qwen/qwen3.5-plus-20260420).
 [vars]
-MODEL = "openai/gpt-4o-mini"
+MODEL = "anthropic/claude-haiku-5.5"
+# Tokens per AI request, map + conversation + answer; older messages are trimmed to fit
+MAX_CONTEXT_TOKENS = "100000"
 
 # Who may use the apps with Google sign-in. Users are managed from the Travel Hub admin page (shared users
 # database below). ADMIN_EMAILS are always admins, so the owner can't be locked out; ALLOWED_EMAILS is a fallback

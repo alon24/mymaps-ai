@@ -130,7 +130,7 @@ Priority: **P0** = v1 must, **P1** = v1 should, **P2** = later.
 - P0 **No per-user key.** Users signed in with Google use the AI on the owner's OpenRouter account: the app sends their Google access token and the Worker verifies with Google that it was issued to this app and that the account is on the `ALLOWED_EMAILS` list (in `worker/wrangler.toml`, stored as SHA-256 hashes). While the OAuth app is in Testing, only Google test users can sign in at all. Signed-out users see "Sign in with Google" in the AI tab. The owner can still use an admin `APP_TOKEN`.
 - P0 Daily AI cap per person (default 100 calls/day, `DAILY_AI_LIMIT`), counted from the shared audit log, so nobody burns the owner's credit by accident; the app says when it's reached. Admins exempt.
 - P0 Clear setup message when the Worker URL is missing; errors shown in the chat.
-- P1 Model switch without code change (Cloudflare `MODEL` variable); default `openai/gpt-4o-mini` via OpenRouter.
+- P1 Model switch without code change (Cloudflare `MODEL` variable); default `anthropic/claude-haiku-5.5` via OpenRouter ($0.10 / $0.50 per million tokens, Oct 2026); `MAX_CONTEXT_TOKENS` 100,000 per request.
 - P2 Decision-only engine (e.g. TypeSafe Jev) for cheap classification once available.
 
 ### 4.10 Settings
@@ -148,7 +148,7 @@ Priority: **P0** = v1 must, **P1** = v1 should, **P2** = later.
 - **Offline**: app shell and opened maps available offline; tiles for viewed areas cached (bounded cache); edits queue to Drive when back online.
 - **Accessibility**: keyboard reachable controls, visible focus, labels on icon buttons, 4.5:1 text contrast, touch targets ≥ 44px.
 - **Privacy & security**: no backend DB; maps live in IndexedDB and the user's Drive. AI requests send map content to OpenRouter through the Worker; the Worker requires a verified Google sign-in for this app (or the admin token), holds the only API key, limits body size. No secrets in the repo or bundle. `drive.file` scope only.
-- **Cost**: GitHub Pages and Cloudflare free tiers; AI cost ≈ cents per day of use with gpt-4o-mini. Nominatim within its usage policy (≤ 1 req/s, attribution).
+- **Cost**: GitHub Pages and Cloudflare free tiers; AI cost ≈ cents per day of use with Claude Haiku 5.5, capped per person per day. Nominatim within its usage policy (≤ 1 req/s, attribution).
 - **Quality**: end-to-end tests (Playwright, desktop + phone viewport) for scenarios 1–3 and 7; unit tests for all import/export, model operations, itinerary math, AI action validation/application, Drive sync logic; CI runs tests and build on every push; deploy only from green `main`.
 
 ## 6. Data model

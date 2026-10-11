@@ -3,7 +3,8 @@ import { addUser, audit, dailyLimit, listUsers, readAudit, removeUser, roleFor, 
 export const DEFAULT_MODEL = 'qwen/qwen3.5-plus-20260420'
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions'
 const MID_RE = /^[A-Za-z0-9_-]{10,100}$/
-const MAX_BODY = 200_000
+const MAX_BODY = 600_000
+const MAX_OUTPUT_TOKENS = 4096
 const MAX_MESSAGES = 50
 
 const CORS = {
@@ -107,6 +108,32 @@ async function handleKml(url) {
   })
 }
 
+/** Rough token estimate (≈3 characters per token; Hebrew runs denser than English, so this errs high). */
+export const estimateTokens = (text) => Math.ceil(String(text).length / 3)
+
+/** MAX_CONTEXT_TOKENS per request (default 100,000, output included). */
+export const contextLimit = (env) => {
+  const n = Number(env.MAX_CONTEXT_TOKENS)
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : 100_000
+}
+
+/**
+ * Keep the newest messages that fit next to the system prompt (the map) under the limit; the conversation
+ * sent upstream always starts with a user message. Returns null when even the newest message doesn't fit.
+ */
+export function fitContext(system, messages, limit) {
+  let budget = limit - MAX_OUTPUT_TOKENS - estimateTokens(system)
+  const kept = []
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const cost = estimateTokens(messages[i].content) + 4
+    if (cost > budget) break
+    budget -= cost
+    kept.unshift(messages[i])
+  }
+  while (kept.length && kept[0].role !== 'user') kept.shift()
+  return kept.length ? kept : null
+}
+
 function validateAiBody(body) {
   if (!body || typeof body !== 'object') return 'body must be a JSON object'
   if (typeof body.system !== 'string') return 'system must be a string'
@@ -131,6 +158,8 @@ async function handleAi(request, env, who) {
   const invalid = validateAiBody(body)
   if (invalid) return error(invalid, 400)
   if (!env.OPENROUTER_API_KEY) return error('OPENROUTER_API_KEY is not configured', 500)
+  const fitted = fitContext(body.system, body.messages.map(({ role, content }) => ({ role, content })), contextLimit(env))
+  if (!fitted) return error('the map is too large for the AI context limit', 413)
   // So nobody burns the owner's OpenRouter credit by accident (DAILY_AI_LIMIT per person per day)
   if (!(await withinDailyCap(env, who))) return json({ error: 'daily limit reached', limit: dailyLimit(env) }, 429)
 
@@ -146,10 +175,8 @@ async function handleAi(request, env, who) {
       // The app always expects one JSON object back; providers that can't enforce it ignore this
       response_format: { type: 'json_object' },
       temperature: 0.4,
-      messages: [
-        { role: 'system', content: body.system },
-        ...body.messages.map(({ role, content }) => ({ role, content })),
-      ],
+      max_tokens: MAX_OUTPUT_TOKENS,
+      messages: [{ role: 'system', content: body.system }, ...fitted],
     }),
   })
   if (!upstream.ok) return error(`openrouter returned ${upstream.status}`, 502)

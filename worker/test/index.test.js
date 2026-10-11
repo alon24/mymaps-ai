@@ -139,7 +139,7 @@ describe('POST /ai', () => {
   })
 
   it('rejects oversized bodies with 413', async () => {
-    const big = { system: 'x'.repeat(200_001), messages: goodAiBody.messages }
+    const big = { system: 'x'.repeat(600_001), messages: goodAiBody.messages }
     expect((await worker.fetch(aiReq(big), env)).status).toBe(413)
   })
 
@@ -248,5 +248,31 @@ describe('Google sign-in auth', () => {
   it('allows the Authorization header in CORS preflight', async () => {
     const res = await worker.fetch(new Request('https://worker.test/ai', { method: 'OPTIONS' }), genv)
     expect(res.headers.get('Access-Control-Allow-Headers')).toContain('Authorization')
+  })
+})
+
+describe('context limit', () => {
+  it('trims the oldest messages so a request stays under MAX_CONTEXT_TOKENS', async () => {
+    const sent = []
+    mockFetch(async (_u, init) => {
+      sent.push(JSON.parse(init.body))
+      return completion('{"reply":"ok"}')
+    })
+    const long = 'א'.repeat(3000) // ~1000 tokens each by the estimate
+    const messages = Array.from({ length: 10 }, (_, i) => ({ role: i % 2 ? 'assistant' : 'user', content: `${i} ${long}` }))
+    const res = await worker.fetch(aiReq({ system: 'sys', messages }), { ...env, MAX_CONTEXT_TOKENS: '8000' })
+    expect(res.status).toBe(200)
+    const out = sent[0].messages
+    expect(out[0]).toEqual({ role: 'system', content: 'sys' })
+    expect(out.length).toBeLessThan(11)
+    expect(out.at(-1).content.startsWith('9 ')).toBe(true) // the newest message is always kept
+    expect(out[1].role).toBe('user') // a conversation sent upstream starts with the user
+    expect(sent[0].max_tokens).toBeGreaterThan(0)
+  })
+
+  it('rejects when the map context alone is over the limit', async () => {
+    mockFetch(async () => completion('{}'))
+    const res = await worker.fetch(aiReq({ system: 'x'.repeat(30_000), messages: [{ role: 'user', content: 'hi' }] }), { ...env, MAX_CONTEXT_TOKENS: '5000' })
+    expect(res.status).toBe(413)
   })
 })
