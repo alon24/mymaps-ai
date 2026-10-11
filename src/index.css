@@ -513,3 +513,18 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); ou
 .proposal--missing pre { white-space: pre-wrap; word-break: break-word; max-height: 220px; overflow: auto; background: var(--raise); padding: 8px; border-radius: 8px; margin: 6px 0 0; }
 
 .about__status { flex-basis: 100%; margin: 0; }
+
+/* Phone ➕ button (AddFab): replaces the drawing-tools strip */
+.fab { display: none; }
+@media (max-width: 899px) {
+  .toolbar__group--tools { display: none !important; }
+  .fab { display: block; position: fixed; z-index: 1080; inset-inline-end: 16px; bottom: calc(var(--sheet-h) + 16px); transition: bottom 240ms cubic-bezier(.2,.9,.3,1.15); }
+  .sheet-full .fab { display: none; }
+  .fab__btn { display: grid; place-items: center; width: 60px; height: 60px; border-radius: 50%; border: 0; background: var(--accent); color: #fff; box-shadow: 0 6px 18px rgb(0 0 0 / .28); cursor: pointer; touch-action: manipulation; }
+  .fab__btn:active { transform: scale(.94); }
+  .fab__btn.is-busy { background: var(--ink); }
+  .fab__btn:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+  .fab__menu { position: absolute; bottom: 72px; inset-inline-end: 0; min-width: 236px; list-style: none; margin: 0; padding: 6px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); animation: rise 160ms ease-out both; }
+  .fab__menu button { all: unset; box-sizing: border-box; width: 100%; display: flex; align-items: center; gap: 12px; padding: 12px; border-radius: 8px; cursor: pointer; }
+  .fab__menu button:hover, .fab__menu button:focus-visible { background: var(--raise); }
+}

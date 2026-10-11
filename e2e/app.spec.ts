@@ -9,7 +9,11 @@ test.beforeEach(async ({ page }) => {
 })
 
 async function addPoint(page: Page, name: string, x: number, y: number) {
-  await page.getByRole('button', { name: 'הוסף נקודה' }).click()
+  // Phones: drawing tools live in the ➕ button
+  if (await page.locator('.fab__btn').isVisible()) {
+    await page.locator('.fab__btn').click()
+    await page.getByRole('menuitem', { name: 'נקודה בהקשה על המפה' }).click()
+  } else await page.getByRole('button', { name: 'הוסף נקודה' }).click()
   const map = page.locator('.map')
   const box = (await map.boundingBox())!
   await page.mouse.click(box.x + box.width * x, box.y + Math.min(box.height * y, 300))
@@ -239,4 +243,17 @@ test('draw a line (drawing library loads in the background)', async ({ page }, i
   await page.getByRole('button', { name: /סיים/ }).click()
   await expect(page.locator('.frow')).toHaveCount(1)
   await expect(page.locator('.frow__mark--LineString')).toHaveCount(1)
+})
+
+test('phone ➕ adds a point at the map center; desktop keeps the tool strip', async ({ page }, info) => {
+  if (info.project.name !== 'phone') {
+    await expect(page.locator('.fab__btn')).toBeHidden()
+    await expect(page.getByRole('button', { name: 'הוסף נקודה' })).toBeVisible()
+    return
+  }
+  await expect(page.getByRole('button', { name: 'הוסף נקודה' })).toBeHidden()
+  await page.locator('.fab__btn').click()
+  await page.getByRole('menuitem', { name: 'נקודה במרכז המפה' }).click()
+  await expect(page.locator('.frow')).toHaveCount(1)
+  await expect(page.locator('.toast')).toContainText('נוסף')
 })

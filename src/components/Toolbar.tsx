@@ -60,7 +60,8 @@ export function Toolbar() {
   return (
     <div className="toolbar" role="toolbar" aria-label="כלים">
       <SearchBox />
-      <div className="toolbar__group">
+      {/* On phones these move into the ➕ button (AddFab) */}
+      <div className={`toolbar__group ${readOnly ? '' : 'toolbar__group--tools'}`}>
         {!readOnly &&
           TOOLS.map((t) => (
             <IconButton key={t.id} icon={t.icon} label={t.label} active={tool === t.id} onClick={() => setTool(tool === t.id && t.id !== 'select' ? 'select' : t.id)} />
