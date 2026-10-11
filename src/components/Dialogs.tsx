@@ -1,12 +1,17 @@
+import { lazy, Suspense, type ReactNode } from 'react'
 import { useUi } from '../store/uiStore'
 import { Dialog } from './ui'
-import { MapsDialog } from './dialogs/MapsDialog'
-import { ImportDialog } from './dialogs/ImportDialog'
-import { ExportDialog } from './dialogs/ExportDialog'
-import { ShareDialog } from './dialogs/ShareDialog'
-import { SettingsDialog } from './dialogs/SettingsDialog'
-import { ConflictDialog } from './dialogs/ConflictDialog'
-import { AboutDialog } from './dialogs/AboutDialog'
+
+// Each dialog (and what it needs, e.g. the KML/ZIP libraries) loads the first time it opens
+const MapsDialog = lazy(() => import('./dialogs/MapsDialog'))
+const ImportDialog = lazy(() => import('./dialogs/ImportDialog'))
+const ExportDialog = lazy(() => import('./dialogs/ExportDialog'))
+const ShareDialog = lazy(() => import('./dialogs/ShareDialog'))
+const SettingsDialog = lazy(() => import('./dialogs/SettingsDialog'))
+const ConflictDialog = lazy(() => import('./dialogs/ConflictDialog'))
+const AboutDialog = lazy(() => import('./dialogs/AboutDialog'))
+
+const Loading = ({ children }: { children: ReactNode }) => <Suspense fallback={<p className="hint">טוען…</p>}>{children}</Suspense>
 
 export function Dialogs() {
   const dialog = useUi((s) => s.dialog)
@@ -14,25 +19,39 @@ export function Dialogs() {
   return (
     <>
       <Dialog open={dialog === 'maps'} onClose={close} title="המפות שלי" wide>
-        <MapsDialog />
+        <Loading>
+          <MapsDialog />
+        </Loading>
       </Dialog>
       <Dialog open={dialog === 'import'} onClose={close} title="ייבוא">
-        <ImportDialog />
+        <Loading>
+          <ImportDialog />
+        </Loading>
       </Dialog>
       <Dialog open={dialog === 'export'} onClose={close} title="ייצוא">
-        <ExportDialog />
+        <Loading>
+          <ExportDialog />
+        </Loading>
       </Dialog>
       <Dialog open={dialog === 'share'} onClose={close} title="שיתוף">
-        <ShareDialog />
+        <Loading>
+          <ShareDialog />
+        </Loading>
       </Dialog>
       <Dialog open={dialog === 'settings'} onClose={close} title="הגדרות">
-        <SettingsDialog />
+        <Loading>
+          <SettingsDialog />
+        </Loading>
       </Dialog>
       <Dialog open={dialog === 'conflict'} onClose={close} title="המפה שונתה במקום אחר">
-        <ConflictDialog />
+        <Loading>
+          <ConflictDialog />
+        </Loading>
       </Dialog>
       <Dialog open={dialog === 'about'} onClose={close} title="אודות MyMaps AI">
-        <AboutDialog />
+        <Loading>
+          <AboutDialog />
+        </Loading>
       </Dialog>
     </>
   )

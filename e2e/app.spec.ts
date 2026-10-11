@@ -227,3 +227,16 @@ test('a map link from Travel Hub opens as a new local map with its day layers', 
   await expect(page.locator('.toast')).toContainText('Travel Hub')
   await expect(page).not.toHaveURL(/#\/import\//)
 })
+
+test('draw a line (drawing library loads in the background)', async ({ page }, info) => {
+  test.skip(info.project.name === 'phone', 'mouse clicks on the map; phone uses the same code path')
+  await page.getByRole('button', { name: 'צייר קו' }).click()
+  const box = (await page.locator('.map').boundingBox())!
+  for (const [x, y] of [[0.4, 0.4], [0.5, 0.45], [0.6, 0.4]]) {
+    await page.mouse.click(box.x + box.width * x, box.y + box.height * y)
+    await page.waitForTimeout(150)
+  }
+  await page.getByRole('button', { name: /סיים/ }).click()
+  await expect(page.locator('.frow')).toHaveCount(1)
+  await expect(page.locator('.frow__mark--LineString')).toHaveCount(1)
+})

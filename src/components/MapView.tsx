@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import L from 'leaflet'
-import '@geoman-io/leaflet-geoman-free'
+import { attachGeoman, hasGeoman, loadGeoman } from './geoman'
 import 'leaflet/dist/leaflet.css'
 import '@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css'
 import { useMapStore } from '../store/mapStore'
@@ -85,6 +85,7 @@ export function MapView() {
   // For one-shot animations: which pins existed in the previous render, and the previous selection
   const seenRef = useRef<{ docId: string; ids: Set<string>; selected: string | null }>({ docId: '', ids: new Set(), selected: null })
   const [measureText, setMeasureText] = useState('')
+  const [pmReady, setPmReady] = useState(false)
 
   const doc = useMapStore((s) => s.doc)
   const selectedId = useMapStore((s) => s.selectedFeatureId)
@@ -103,12 +104,14 @@ export function MapView() {
     const map = L.map(el.current, { zoomControl: false, attributionControl: true, tapHold: true } as L.MapOptions).setView([31.77, 35.21], 8)
     L.control.zoom({ position: 'bottomleft' }).addTo(map)
     map.attributionControl.setPrefix(false)
-    map.pm.setLang('he' as never)
-    map.pm.setGlobalOptions({ snappable: false, continueDrawing: false } as never)
     drawnRef.current = L.layerGroup().addTo(map)
     extrasRef.current = L.layerGroup().addTo(map)
     measureRef.current.group.addTo(map)
     mapRef.current = map
+    void loadGeoman().then(() => {
+      attachGeoman(map)
+      setPmReady(true)
+    })
 
     const report = () => {
       const c = map.getCenter()
@@ -195,9 +198,9 @@ export function MapView() {
   useEffect(() => {
     const map = mapRef.current
     if (!map) return
-    map.pm.disableDraw()
-    if (tool === 'line') map.pm.enableDraw('Line', { finishOn: 'dblclick', templineStyle: { color: '#17302a' }, hintlineStyle: { color: '#17302a', dashArray: [5, 5] } } as never)
-    if (tool === 'polygon') map.pm.enableDraw('Polygon', { finishOn: 'dblclick', templineStyle: { color: '#17302a' }, hintlineStyle: { color: '#17302a', dashArray: [5, 5] } } as never)
+    if (hasGeoman(map)) map.pm.disableDraw()
+    if (tool === 'line' && hasGeoman(map)) map.pm.enableDraw('Line', { finishOn: 'dblclick', templineStyle: { color: '#17302a' }, hintlineStyle: { color: '#17302a', dashArray: [5, 5] } } as never)
+    if (tool === 'polygon' && hasGeoman(map)) map.pm.enableDraw('Polygon', { finishOn: 'dblclick', templineStyle: { color: '#17302a' }, hintlineStyle: { color: '#17302a', dashArray: [5, 5] } } as never)
     if (tool !== 'measure') {
       measureRef.current.pts = []
       drawMeasure()
@@ -205,7 +208,7 @@ export function MapView() {
     el.current?.classList.toggle('map--crosshair', tool !== 'select')
     if (tool !== 'select') map.closePopup()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tool])
+  }, [tool, pmReady])
 
   // ---------- base layer ----------
   useEffect(() => {
@@ -286,7 +289,7 @@ export function MapView() {
           el?.classList.add('shape--new')
         }
         nextIds.add(id)
-        if (editable && g.type !== 'Point') {
+        if (editable && g.type !== 'Point' && pmReady) {
           ;(lyr as L.Polyline).pm.enable({ allowSelfIntersection: true, snappable: false } as never)
           lyr.on('pm:update', () => {
             const geometry = geometryFromLayer(lyr)
@@ -296,7 +299,7 @@ export function MapView() {
       }
     }
     seenRef.current = { docId: doc.id, ids: nextIds, selected: selectedId }
-  }, [doc, selectedId, highlights, readOnly, tool])
+  }, [doc, selectedId, highlights, readOnly, tool, pmReady])
 
   // ---------- extras: search pin, user location ----------
   useEffect(() => {
@@ -418,7 +421,7 @@ export function addFeatureToActiveLayer(geometry: MapGeometry, props: { name?: s
 /* Geoman exposes these on the draw handlers; they're stable across 2.x. */
 type DrawHandler = { _finishShape?: () => void; _removeLastVertex?: () => void; _layer?: L.Polyline }
 const handler = (map: L.Map | null, tool: 'line' | 'polygon') =>
-  (map?.pm.Draw as unknown as Record<string, DrawHandler> | undefined)?.[tool === 'line' ? 'Line' : 'Polygon']
+  (map?.pm?.Draw as unknown as Record<string, DrawHandler> | undefined)?.[tool === 'line' ? 'Line' : 'Polygon']
 
 function finishDraw(map: L.Map | null, tool: 'line' | 'polygon') {
   const h = handler(map, tool)

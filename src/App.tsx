@@ -1,10 +1,9 @@
-import { useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { MapView } from './components/MapView'
 import { Toolbar } from './components/Toolbar'
 import { LayersPanel } from './components/LayersPanel'
 import { ItineraryPanel } from './components/ItineraryPanel'
-import { AiPanel } from './components/AiPanel'
 import { FeatureEditor } from './components/FeatureEditor'
 import { Dialogs } from './components/Dialogs'
 import { Icon, IconButton, RenameField } from './components/ui'
@@ -43,6 +42,9 @@ function HeaderActions() {
     </>
   )
 }
+
+// The AI tab (and its action/validation code) loads when first opened
+const AiPanel = lazy(() => import('./components/AiPanel').then((m) => ({ default: m.AiPanel })))
 
 const TABS: { id: PanelTab; label: string; icon: string }[] = [
   { id: 'layers', label: 'שכבות', icon: 'layers' },
@@ -448,7 +450,11 @@ export default function App() {
             <div className="panel__body" data-sort-scroll role="tabpanel" key={tab}>
               {tab === 'layers' && <LayersPanel />}
               {tab === 'itinerary' && <ItineraryPanel />}
-              {tab === 'ai' && <AiPanel />}
+              {tab === 'ai' && (
+                <Suspense fallback={<p className="hint">טוען…</p>}>
+                  <AiPanel />
+                </Suspense>
+              )}
             </div>
           </>
         )}
