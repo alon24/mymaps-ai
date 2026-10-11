@@ -208,3 +208,22 @@ test('Check for updates says when already on the latest version', async ({ page 
   await page.getByRole('button', { name: /בדוק עדכונים/ }).click()
   await expect(page.getByText(/אתה בגרסה האחרונה/)).toBeVisible()
 })
+
+test('a map link from Travel Hub opens as a new local map with its day layers', async ({ page }) => {
+  const doc = {
+    schema: 1, id: 'trip-e2e', title: 'Lisbon & Porto', description: 'From Travel Hub', updatedAt: '2026-10-10T12:00:00Z',
+    layers: [
+      { id: 'b', name: '✈ Flights & stays', visible: true, color: '#5c5c5c', style: 'individual', features: [
+        { type: 'Feature', geometry: { type: 'Point', coordinates: [-9.13, 38.71] }, properties: { id: 'h', name: 'Alfama flat', description: '', color: '#7b2d8e', icon: '🏨' } },
+      ] },
+      { id: 'd1', name: 'Day 1 · Lisbon', visible: true, color: '#1f6f5c', style: 'numbered', day: { date: '2026-11-17', route: true }, features: [] },
+    ],
+  }
+  const payload = Buffer.from(JSON.stringify(doc)).toString('base64url')
+  await page.goto(`/#/import/${payload}`)
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Lisbon & Porto')
+  await expect(page.getByText('Alfama flat')).toBeVisible()
+  await expect(page.getByText('Day 1 · Lisbon')).toBeVisible()
+  await expect(page.locator('.toast')).toContainText('Travel Hub')
+  await expect(page).not.toHaveURL(/#\/import\//)
+})

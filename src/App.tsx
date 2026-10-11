@@ -13,6 +13,7 @@ import { useMapStore } from './store/mapStore'
 import { useUi, type PanelTab } from './store/uiStore'
 import * as ops from './model/ops'
 import { parseHash } from './lib/appBase'
+import { importFromLink, readImportHash } from './lib/importLink'
 import * as storage from './lib/storage'
 import { lastMapId, openDriveMap, openLocal, refreshCurrentFromDrive, saveToDrive, signIn, startAutosave, uploadLocalMaps, type OpenOutcome } from './lib/driveSync'
 import { driveEnabled } from './env'
@@ -339,11 +340,22 @@ export default function App() {
     if (selected && useUi.getState().sheet === 'peek') useUi.getState().setSheet('half')
   }, [selected])
 
-  // Routing: #/m/<driveFileId>?f=<featureId> opens a Drive map; otherwise the last local map.
+  // Routing: #/m/<driveFileId>?f=<featureId> opens a Drive map, #/import/<data> adds a linked map; otherwise the last local map.
   useEffect(() => {
     const route = async () => {
       const r = parseHash(window.location.hash)
-      if (r.driveFileId && driveEnabled()) {
+      const linked = readImportHash(window.location.hash)
+      if (linked) {
+        // A map handed over by Travel Hub (#/import/…): save it as a local map and open it
+        try {
+          const { id, added } = await importFromLink(linked)
+          await openLocal(id)
+          useUi.getState().showToast(added ? 'המפה של הטיול נוספה מ־Travel Hub' : 'המפה של הטיול כבר כאן, פתחתי אותה')
+        } catch {
+          await openLocal(lastMapId())
+          useUi.getState().showToast('הקישור למפה פגום או לא שלם')
+        }
+      } else if (r.driveFileId && driveEnabled()) {
         if (useMapStore.getState().doc.driveFileId === r.driveFileId && ready) {
           if (r.featureId) {
             useMapStore.getState().select(r.featureId)

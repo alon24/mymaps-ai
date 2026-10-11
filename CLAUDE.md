@@ -78,6 +78,11 @@ npx wrangler dev
 npx wrangler deploy   # or automatic from GitHub Actions when CLOUDFLARE_API_TOKEN is set
 ```
 
+## Speed (learned 2026-10-10)
+- **While iterating, run only what you touched:** `npx vitest run <file or dir>` and `npx playwright test -g "<test name>" --project=desktop`. The full `npm test` + `npm run test:e2e` run once, before the PR.
+- **Port 4173 belongs to the e2e preview server** (`reuseExistingServer`). Never run another server there: Playwright will test it instead, and dozens of unrelated tests fail. Use another port for anything else, and run e2e with `CI=1` to force its own server.
+- Start long suites in the background and keep working.
+
 ## Definition of done
 1. Tests added/updated and passing (`npm test`), e2e passing for touched flows.
 2. `npm run build` succeeds, no TypeScript errors.
