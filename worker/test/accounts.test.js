@@ -138,3 +138,28 @@ describe('audit and usage', () => {
     await expect(audit({ DB: broken }, { email: 'a@b.c', app: 'x', action: 'y' })).resolves.toBeUndefined()
   })
 })
+
+describe('daily AI cap', () => {
+  const ai = (email) => call('/ai', email, json({ system: 's', messages: [{ role: 'user', content: 'hi' }] }))
+  it('stops a user after DAILY_AI_LIMIT AI calls today (per person); admins are exempt', async () => {
+    const e = { ...env, ALLOWED_EMAILS: 'a@example.com,b@example.com', DAILY_AI_LIMIT: '2' }
+    expect((await worker.fetch(ai('a@example.com'), e)).status).toBe(200)
+    expect((await worker.fetch(ai('a@example.com'), e)).status).toBe(200)
+    const over = await worker.fetch(ai('a@example.com'), e)
+    expect(over.status).toBe(429)
+    expect(await over.json()).toMatchObject({ error: 'daily limit reached', limit: 2 })
+    expect((await worker.fetch(ai('b@example.com'), e)).status).toBe(200)
+    for (let i = 0; i < 3; i++) expect((await worker.fetch(ai(ADMIN), e)).status).toBe(200)
+  })
+  it("yesterday's calls don't count", async () => {
+    const e = { ...env, ALLOWED_EMAILS: 'a@example.com', DAILY_AI_LIMIT: '1' }
+    await cf.DB.prepare("INSERT INTO audit (ts, email, app, action) VALUES (?, 'a@example.com', 'mymaps', 'ai')").bind(Date.now() - 2 * 86_400_000).run()
+    expect((await worker.fetch(ai('a@example.com'), e)).status).toBe(200)
+  })
+  it('defaults to 100 a day', async () => {
+    const { dailyLimit } = await import('../src/accounts.js')
+    expect(dailyLimit({})).toBe(100)
+    expect(dailyLimit({ DAILY_AI_LIMIT: 'x' })).toBe(100)
+    expect(dailyLimit({ DAILY_AI_LIMIT: '30' })).toBe(30)
+  })
+})

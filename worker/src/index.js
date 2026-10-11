@@ -1,4 +1,4 @@
-import { addUser, audit, listUsers, readAudit, removeUser, roleFor, usage } from './accounts.js'
+import { addUser, audit, dailyLimit, listUsers, readAudit, removeUser, roleFor, usage, withinDailyCap } from './accounts.js'
 
 export const DEFAULT_MODEL = 'qwen/qwen3.5-plus-20260420'
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions'
@@ -131,6 +131,8 @@ async function handleAi(request, env, who) {
   const invalid = validateAiBody(body)
   if (invalid) return error(invalid, 400)
   if (!env.OPENROUTER_API_KEY) return error('OPENROUTER_API_KEY is not configured', 500)
+  // So nobody burns the owner's OpenRouter credit by accident (DAILY_AI_LIMIT per person per day)
+  if (!(await withinDailyCap(env, who))) return json({ error: 'daily limit reached', limit: dailyLimit(env) }, 429)
 
   const upstream = await fetch(OPENROUTER_URL, {
     method: 'POST',

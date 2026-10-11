@@ -29,6 +29,16 @@ async function call(settings: Settings, path: string, init: RequestInit = {}): P
       401,
     )
   }
+  if (res.status === 429) {
+    let limit = ''
+    try {
+      const body = (await res.json()) as { limit?: number }
+      if (body.limit) limit = ` (${body.limit} שאלות)`
+    } catch {
+      /* not JSON */
+    }
+    throw new ApiError(`הגעת למכסה היומית של עוזר ה-AI${limit}. אפשר להמשיך מחר.`, 429)
+  }
   if (!res.ok) {
     let msg = `שגיאה ${res.status}`
     try {

@@ -48,4 +48,10 @@ describe('Worker auth headers', () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(Response.json({ error: 'unauthorized' }, { status: 401 }))
     await expect(askAi({ workerUrl: W, appToken: '' }, 's', [{ role: 'user', content: 'x' }])).rejects.toThrow(/התחבר שוב עם Google/)
   })
+
+  it('explains the daily cap', async () => {
+    auth.signed = true
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(Response.json({ error: 'daily limit reached', limit: 100 }, { status: 429 }))
+    await expect(askAi({ workerUrl: W, appToken: '' }, 's', [{ role: 'user', content: 'x' }])).rejects.toThrow(/מכסה היומית.*100 שאלות/)
+  })
 })

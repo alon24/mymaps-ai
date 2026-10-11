@@ -91,6 +91,28 @@ export async function audit(env, { email, app, action, detail = null, tokens = n
   }
 }
 
+// ---------- daily AI cap
+
+/** AI calls a person may make per UTC day (DAILY_AI_LIMIT, default 100). */
+export const dailyLimit = (env) => {
+  const n = Number(env.DAILY_AI_LIMIT)
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : 100
+}
+
+/**
+ * True when this person still has AI calls left today, counted from the audit log (every AI call is logged
+ * there already). Admins are never capped; without the database the cap is skipped.
+ */
+export async function withinDailyCap(env, who) {
+  if (who.role === 'admin' || !env.DB) return true
+  await ensureSchema(env.DB)
+  const dayStart = new Date(new Date().toISOString().slice(0, 10)).getTime()
+  const row = await env.DB.prepare("SELECT COUNT(*) AS n FROM audit WHERE email = ? AND action = 'ai' AND ts >= ?")
+    .bind(normalizeEmail(who.email), dayStart)
+    .first()
+  return (row?.n ?? 0) < dailyLimit(env)
+}
+
 // ---------- admin API (callers must already be admins)
 
 const clampInt = (v, def, min, max) => {
