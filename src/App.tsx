@@ -21,6 +21,7 @@ import { driveEnabled } from './env'
 import { isSignedIn, onAuthChange, signOut, wasSignedIn } from './google/auth'
 import { versionLabel } from './version'
 import { autoLocate } from './lib/location'
+import { startRouting } from './store/routeStore'
 import { installLatest, isDevBuild, isNewer, latestVersion, verifyAfterUpdate } from './lib/update'
 import { APP_VERSION } from './version'
 
@@ -330,6 +331,7 @@ export default function App() {
   const [ready, setReady] = useState(false)
 
   useEffect(() => startAutosave(), [])
+  useEffect(() => startRouting(), [])
   useUpdateWatcher()
   // Phones: GPS on from the start (permission prompt the first time)
   useEffect(() => {

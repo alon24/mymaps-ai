@@ -110,3 +110,27 @@ describe('moving between layers', () => {
     ])
   })
 })
+
+describe('travel mode and day times', () => {
+  it('sets a layer travel mode (and clears it back to straight lines)', () => {
+    const m = ops.createMap('t')
+    const id = m.layers[0].id
+    const car = ops.setLayerTravel(m, id, 'car')
+    expect(car.layers[0].travel).toBe('car')
+    expect('travel' in ops.setLayerTravel(car, id, 'straight').layers[0]).toBe(false)
+  })
+  it('migrate keeps valid travel/start/stay and drops bad values', () => {
+    const m = ops.createMap('t')
+    const raw = JSON.parse(JSON.stringify(m))
+    raw.layers[0].travel = 'foot'
+    raw.layers[0].day = { route: true, start: '09:30', stay: 45 }
+    const ok = ops.migrate(raw).layers[0]
+    expect(ok.travel).toBe('foot')
+    expect(ok.day).toEqual({ route: true, start: '09:30', stay: 45 })
+    raw.layers[0].travel = 'rocket'
+    raw.layers[0].day = { route: true, start: '9am', stay: -5 }
+    const bad = ops.migrate(raw).layers[0]
+    expect(bad.travel).toBeUndefined()
+    expect(bad.day).toEqual({ route: true })
+  })
+})

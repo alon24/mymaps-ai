@@ -2,7 +2,9 @@ import { useEffect, useRef, useState } from 'react'
 import { useMapStore } from '../store/mapStore'
 import { useUi } from '../store/uiStore'
 import * as ops from '../model/ops'
-import type { Layer, LayerStyle, MapFeature } from '../model/types'
+import type { Layer, LayerStyle, MapFeature, TravelMode } from '../model/types'
+import { currentRoute, useRoutes } from '../store/routeStore'
+import { formatDuration, TRAVEL_ICON, TRAVEL_LABEL } from '../geo/routing'
 import { PALETTE } from '../model/types'
 import { dayRouteUrls, stopsOf } from '../model/itinerary'
 import { formatDistance } from '../geo/measure'
@@ -72,17 +74,48 @@ export function FeatureRow({ f, layer, position, onOpen }: { f: MapFeature; laye
   )
 }
 
+/** Straight line, or a route along roads by car / foot / bike (computed by OSM routing). */
+export function TravelPicker({ layer }: { layer: Layer }) {
+  const options: [TravelMode | 'straight', string][] = [
+    ['straight', 'קו ישר'],
+    ['car', `${TRAVEL_ICON.car} רכב`],
+    ['foot', `${TRAVEL_ICON.foot} הליכה`],
+    ['bike', `${TRAVEL_ICON.bike} אופניים`],
+  ]
+  const current = layer.travel ?? 'straight'
+  return (
+    <fieldset className="field">
+      <legend>סוג המסלול</legend>
+      <div className="seg">
+        {options.map(([m, label]) => (
+          <button key={m} type="button" className={current === m ? 'is-on' : ''} aria-pressed={current === m} onClick={() => useMapStore.getState().apply((d) => ops.setLayerTravel(d, layer.id, m))}>
+            {label}
+          </button>
+        ))}
+      </div>
+    </fieldset>
+  )
+}
+
 /** Total distance + Google Maps directions through the layer's points, in order. */
 export function RouteInfo({ layer }: { layer: Layer }) {
+  const byLayer = useRoutes((s) => s.byLayer)
   if (!ops.hasRoute(layer)) return null
   const stops = stopsOf(layer)
   if (stops.length < 2) return <p className="hint">הוסף לפחות שתי נקודות כדי לראות מסלול.</p>
   const total = stops.reduce((s, x) => s + x.legMeters, 0)
-  const urls = dayRouteUrls(stops)
+  const urls = dayRouteUrls(stops, layer.travel)
+  const road = currentRoute(layer, byLayer)
+  const pending = layer.travel && byLayer[layer.id]
   return (
     <div className="route-info">
       <span>
-        {stops.length} עצירות · {formatDistance(total)} בקו אווירי
+        {stops.length} עצירות ·{' '}
+        {road && layer.travel
+          ? `${formatDistance(road.legs.reduce((s, l) => s + l.meters, 0))} · ${formatDuration(road.legs.reduce((s, l) => s + l.seconds, 0))} ${TRAVEL_LABEL[layer.travel]}`
+          : `${formatDistance(total)} בקו אווירי`}
+        {pending?.status === 'loading' && ' · מחשב מסלול…'}
+        {pending?.status === 'error' && ` · ${pending.error}`}
       </span>
       <div className="row row--wrap">
         {urls.map((u, i) => (
@@ -153,6 +186,7 @@ function LayerMenu({ layer, index, count, onClose }: { layer: Layer; index: numb
         <input type="checkbox" checked={ops.hasRoute(layer)} onChange={(e) => apply((d) => ops.setLayerRoute(d, layer.id, e.target.checked))} />
         <span>מסלול בין המקומות לפי הסדר</span>
       </label>
+      {ops.hasRoute(layer) && <TravelPicker layer={layer} />}
       <RouteInfo layer={layer} />
       <div className="row row--wrap">
         <button type="button" className="btn" onClick={() => focusOn({ layerId: layer.id })} disabled={!layer.features.length}>

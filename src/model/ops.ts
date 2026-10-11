@@ -1,5 +1,5 @@
-import type { Layer, LayerStyle, MapDoc, MapFeature, MapGeometry, FeatureProps, TripDay } from './types'
-import { PALETTE, SCHEMA_VERSION } from './types'
+import type { Layer, LayerStyle, MapDoc, MapFeature, MapGeometry, FeatureProps, TravelMode, TripDay } from './types'
+import { PALETTE, SCHEMA_VERSION, TRAVEL_MODES } from './types'
 
 export const newId = (): string =>
   typeof crypto !== 'undefined' && 'randomUUID' in crypto
@@ -28,6 +28,7 @@ export function createLayer(name: string, features: MapFeature[] = [], opts: Par
     style: opts.style ?? 'individual',
     ...(opts.day ? { day: opts.day } : {}),
     ...(opts.route ? { route: true } : {}),
+    ...(opts.travel ? { travel: opts.travel } : {}),
     ...(opts.visible === false ? { visible: false } : {}),
     features,
   }
@@ -37,6 +38,18 @@ export function createLayer(name: string, features: MapFeature[] = [], opts: Par
 export function nextLayerColor(doc: MapDoc): string {
   const used = new Set(doc.layers.map((l) => l.color))
   return PALETTE.find((c) => !used.has(c)) ?? PALETTE[doc.layers.length % PALETTE.length]
+}
+
+const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/
+
+/** A trip day with only valid fields (bad times or durations are dropped). */
+export function cleanDay(d: Partial<TripDay>): TripDay {
+  return {
+    route: d.route !== false,
+    ...(typeof d.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d.date) ? { date: d.date } : {}),
+    ...(typeof d.start === 'string' && HHMM.test(d.start) ? { start: d.start } : {}),
+    ...(typeof d.stay === 'number' && Number.isFinite(d.stay) && d.stay >= 0 && d.stay <= 24 * 60 ? { stay: Math.round(d.stay) } : {}),
+  }
 }
 
 /** Bring any stored/imported document up to the current schema. */
@@ -57,8 +70,9 @@ export function migrate(raw: unknown): MapDoc {
       visible: l.visible !== false,
       color: typeof l.color === 'string' ? l.color : PALETTE[i % PALETTE.length],
       style: l.style === 'uniform' || l.style === 'numbered' ? l.style : 'individual',
-      ...(l.day ? { day: { route: l.day.route !== false, ...(l.day.date ? { date: l.day.date } : {}) } } : {}),
+      ...(l.day ? { day: cleanDay(l.day) } : {}),
       ...(l.route ? { route: true } : {}),
+      ...(TRAVEL_MODES.includes(l.travel as TravelMode) ? { travel: l.travel } : {}),
       features: Array.isArray(l.features) ? l.features : [],
     })),
   }
@@ -166,6 +180,14 @@ export const setLayerRoute = (doc: MapDoc, layerId: string, on: boolean): MapDoc
     const { route: _r, ...rest } = l
     void _r
     return on ? { ...rest, route: true, style: l.route ? l.style : 'numbered' } : rest
+  })
+
+/** Route along roads by car/foot/bike, or a straight line ('straight'). */
+export const setLayerTravel = (doc: MapDoc, layerId: string, mode: TravelMode | 'straight'): MapDoc =>
+  mapLayer(doc, layerId, (l) => {
+    const { travel: _t, ...rest } = l
+    void _t
+    return mode === 'straight' ? rest : { ...rest, travel: mode }
   })
 
 /** Mark a layer as a trip day (numbered by default) or clear it with `null`. */

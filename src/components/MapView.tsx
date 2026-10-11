@@ -4,6 +4,7 @@ import { attachGeoman, hasGeoman, loadGeoman } from './geoman'
 import 'leaflet/dist/leaflet.css'
 import '@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css'
 import { useMapStore } from '../store/mapStore'
+import { currentRoute, useRoutes } from '../store/routeStore'
 import { useUi, type BaseLayer } from '../store/uiStore'
 import * as ops from '../model/ops'
 import type { Layer, MapFeature, MapGeometry } from '../model/types'
@@ -92,6 +93,7 @@ export function MapView() {
   const tool = useMapStore((s) => s.tool)
   const readOnly = useMapStore((s) => s.readOnly)
   const highlights = useUi((s) => s.highlights)
+  const routes = useRoutes((s) => s.byLayer)
   const focus = useUi((s) => s.focus)
   const base = useUi((s) => s.base)
   const searchPin = useUi((s) => s.searchPin)
@@ -236,8 +238,12 @@ export function MapView() {
       if (!layer.visible) continue
       // route line for trip days
       if (ops.hasRoute(layer)) {
+        // Along the roads when a travel mode is set and its route is ready; a dotted straight line otherwise
+        const road = currentRoute(layer, routes)
         const pts = layer.features.filter((f) => f.geometry.type === 'Point').map((f) => f.geometry.coordinates as number[])
-        if (pts.length > 1)
+        if (road?.line.length)
+          L.polyline(toLatLngs(road.line), { color: layer.color, weight: 5, opacity: 0.8, lineCap: 'round', lineJoin: 'round', interactive: false }).addTo(group)
+        else if (pts.length > 1)
           L.polyline(toLatLngs(pts), { color: layer.color, weight: 4, opacity: 0.75, dashArray: '2 9', lineCap: 'round', interactive: false }).addTo(group)
       }
       for (const f of layer.features) {
@@ -299,7 +305,7 @@ export function MapView() {
       }
     }
     seenRef.current = { docId: doc.id, ids: nextIds, selected: selectedId }
-  }, [doc, selectedId, highlights, readOnly, tool, pmReady])
+  }, [doc, selectedId, highlights, readOnly, tool, pmReady, routes])
 
   // ---------- extras: search pin, user location ----------
   useEffect(() => {

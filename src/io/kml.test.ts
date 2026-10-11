@@ -101,3 +101,13 @@ describe('exportKml', () => {
     expect(back.layers.map((l) => l.name)).toEqual(['נקודות', 'צורות', 'ריקה'])
   })
 })
+
+describe('travel mode and day times round-trip', () => {
+  it('keeps travel, start and stay through KML export → import', () => {
+    const m = createMap('trip')
+    m.layers[0] = { ...m.layers[0], name: 'יום 1', style: 'numbered', travel: 'car', day: { date: '2026-11-02', route: true, start: '08:45', stay: 90 } }
+    const back = importKml(exportKml(m)).layers[0]
+    expect(back.travel).toBe('car')
+    expect(back.day).toEqual({ date: '2026-11-02', route: true, start: '08:45', stay: 90 })
+  })
+})

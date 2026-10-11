@@ -22,7 +22,15 @@ export interface TripDay {
   date?: string
   /** Draw a line connecting the day's points in order */
   route: boolean
+  /** Departure time "HH:MM" (arrival times are computed from it) */
+  start?: string
+  /** Minutes spent at each stop (default 60) */
+  stay?: number
 }
+
+/** How a route line is drawn: along roads for these modes, a straight line when absent. */
+export type TravelMode = 'car' | 'foot' | 'bike'
+export const TRAVEL_MODES: readonly TravelMode[] = ['car', 'foot', 'bike']
 
 export interface Layer {
   id: string
@@ -35,6 +43,8 @@ export interface Layer {
   day?: TripDay
   /** Route line through the layer's points in order (for non-day layers; days use day.route) */
   route?: boolean
+  /** Route along roads by car/foot/bike (absent = straight line) */
+  travel?: TravelMode
   /** Order = sequence order (numbers, itinerary, route) */
   features: MapFeature[]
 }

@@ -1,8 +1,8 @@
 import { kmlWithFolders, gpx, type Folder, type F } from '@tmcw/togeojson'
 import JSZip from 'jszip'
-import { createLayer } from '../model/ops'
-import type { Layer, LayerStyle, MapDoc, MapFeature, TripDay } from '../model/types'
-import { PALETTE } from '../model/types'
+import { cleanDay, createLayer } from '../model/ops'
+import type { Layer, LayerStyle, MapDoc, MapFeature, TravelMode, TripDay } from '../model/types'
+import { PALETTE, TRAVEL_MODES } from '../model/types'
 import { normalizeColor, toMapFeatures } from './normalize'
 
 /** Most common feature color, used as the layer color for imported layers. */
@@ -17,6 +17,7 @@ interface FolderExtras {
   color?: string
   day?: TripDay
   route?: boolean
+  travel?: TravelMode
   visible?: boolean
 }
 
@@ -39,10 +40,14 @@ function folderExtras(folder: Element): FolderExtras {
           out.route = value === '1'
           break
         case 'mymaps:day': {
-          const [date, route] = value.split('|')
-          out.day = { route: route !== 'noroute', ...(/^\d{4}-\d{2}-\d{2}$/.test(date) ? { date } : {}) }
+          // date|route[|start|stay] (older exports have only the first two)
+          const [date, route, start, stay] = value.split('|')
+          out.day = cleanDay({ date, route: route !== 'noroute', start, stay: stay ? Number(stay) : undefined })
           break
         }
+        case 'mymaps:travel':
+          if ((TRAVEL_MODES as readonly string[]).includes(value)) out.travel = value as TravelMode
+          break
       }
     }
   }
@@ -101,6 +106,7 @@ export function importKml(text: string): ImportResult {
           style: x.style,
           day: x.day,
           route: x.route,
+          travel: x.travel,
           visible: x.visible,
         }),
       )
@@ -180,8 +186,9 @@ export function exportKml(doc: MapDoc): string {
       const data = [
         ['mymaps:style', l.style],
         ['mymaps:color', l.color],
-        ...(l.day ? [['mymaps:day', `${l.day.date ?? ''}|${l.day.route ? 'route' : 'noroute'}`]] : []),
+        ...(l.day ? [['mymaps:day', [l.day.date ?? '', l.day.route ? 'route' : 'noroute', l.day.start ?? '', l.day.stay ?? ''].join('|').replace(/\|+$/, '')]] : []),
         ...(l.route ? [['mymaps:route', '1']] : []),
+        ...(l.travel ? [['mymaps:travel', l.travel]] : []),
       ]
         .map(([k, v]) => `<Data name="${k}"><value>${esc(v)}</value></Data>`)
         .join('')

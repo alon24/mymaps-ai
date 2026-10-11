@@ -1,4 +1,4 @@
-import type { Layer, MapDoc, MapFeature } from './types'
+import type { Layer, MapDoc, MapFeature, TravelMode } from './types'
 import { haversine } from '../geo/measure'
 
 export interface Stop {
@@ -88,7 +88,9 @@ export function googleSearchUrl(name: string, s: { lat: number; lng: number }): 
 /** Google Maps URLs allow up to 9 waypoints; longer days are split into consecutive legs. */
 export const MAX_WAYPOINTS = 9
 
-export function dayRouteUrls(stops: Pick<Stop, 'lat' | 'lng'>[]): string[] {
+const GOOGLE_MODE: Record<TravelMode, string> = { car: 'driving', foot: 'walking', bike: 'bicycling' }
+
+export function dayRouteUrls(stops: Pick<Stop, 'lat' | 'lng'>[], travel?: TravelMode): string[] {
   if (stops.length < 2) return stops.length ? [navigateUrl(stops[0])] : []
   const urls: string[] = []
   const chunk = MAX_WAYPOINTS + 2 // origin + waypoints + destination
@@ -98,6 +100,7 @@ export function dayRouteUrls(stops: Pick<Stop, 'lat' | 'lng'>[]): string[] {
     const destination = rest.pop()!
     const params = new URLSearchParams({ api: '1', origin: ll(origin), destination: ll(destination) })
     if (rest.length) params.set('waypoints', rest.map(ll).join('|'))
+    if (travel) params.set('travelmode', GOOGLE_MODE[travel])
     urls.push(`https://www.google.com/maps/dir/?${params}`)
   }
   return urls
