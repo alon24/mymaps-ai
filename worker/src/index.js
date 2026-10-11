@@ -125,7 +125,7 @@ export function fitContext(system, messages, limit) {
   let budget = limit - MAX_OUTPUT_TOKENS - estimateTokens(system)
   const kept = []
   for (let i = messages.length - 1; i >= 0; i--) {
-    const cost = estimateTokens(messages[i].content) + 4
+    const cost = estimateTokens(JSON.stringify(messages[i])) + 4
     if (cost > budget) break
     budget -= cost
     kept.unshift(messages[i])
@@ -134,17 +134,42 @@ export function fitContext(system, messages, limit) {
   return kept.length ? kept : null
 }
 
+const MAX_TOOLS = 8
+
+/** One chat message: user/assistant text, an assistant tool call, or a tool result. */
+function validMessage(m) {
+  if (!m || typeof m !== 'object') return false
+  if (m.role === 'user') return typeof m.content === 'string'
+  if (m.role === 'assistant') {
+    if (typeof m.content === 'string' && !m.tool_calls) return true
+    return (m.content == null || typeof m.content === 'string') && Array.isArray(m.tool_calls) && m.tool_calls.length > 0 &&
+      m.tool_calls.every((c) => c && typeof c.id === 'string' && typeof c.function?.name === 'string')
+  }
+  if (m.role === 'tool') return typeof m.tool_call_id === 'string' && typeof m.content === 'string'
+  return false
+}
+
 function validateAiBody(body) {
   if (!body || typeof body !== 'object') return 'body must be a JSON object'
   if (typeof body.system !== 'string') return 'system must be a string'
-  const { messages } = body
+  const { messages, tools } = body
   if (!Array.isArray(messages) || messages.length === 0) return 'messages must be a non-empty array'
   if (messages.length > MAX_MESSAGES) return 'too many messages'
-  const ok = messages.every(
-    (m) => m && ['user', 'assistant'].includes(m.role) && typeof m.content === 'string',
-  )
-  return ok ? null : 'each message needs role user|assistant and string content'
+  if (!messages.every(validMessage)) return 'each message needs role user|assistant|tool with valid content'
+  if (tools !== undefined) {
+    if (!Array.isArray(tools) || tools.length > MAX_TOOLS) return `tools must be an array of at most ${MAX_TOOLS}`
+    if (!tools.every((t) => t?.type === 'function' && typeof t.function?.name === 'string')) return 'each tool must be a function'
+  }
+  return null
 }
+
+/** Only the fields OpenRouter needs, per message kind. */
+const cleanMessage = (m) =>
+  m.role === 'tool'
+    ? { role: 'tool', tool_call_id: m.tool_call_id, content: m.content }
+    : m.role === 'assistant' && m.tool_calls
+      ? { role: 'assistant', content: m.content ?? null, tool_calls: m.tool_calls }
+      : { role: m.role, content: m.content }
 
 async function handleAi(request, env, who) {
   const raw = await request.text()
@@ -158,7 +183,7 @@ async function handleAi(request, env, who) {
   const invalid = validateAiBody(body)
   if (invalid) return error(invalid, 400)
   if (!env.OPENROUTER_API_KEY) return error('OPENROUTER_API_KEY is not configured', 500)
-  const fitted = fitContext(body.system, body.messages.map(({ role, content }) => ({ role, content })), contextLimit(env))
+  const fitted = fitContext(body.system, body.messages.map(cleanMessage), contextLimit(env))
   if (!fitted) return error('the map is too large for the AI context limit', 413)
   // So nobody burns the owner's OpenRouter credit by accident (DAILY_AI_LIMIT per person per day)
   if (!(await withinDailyCap(env, who))) return json({ error: 'daily limit reached', limit: dailyLimit(env) }, 429)
@@ -172,8 +197,8 @@ async function handleAi(request, env, who) {
     },
     body: JSON.stringify({
       model: env.MODEL || DEFAULT_MODEL,
-      // The app always expects one JSON object back; providers that can't enforce it ignore this
-      response_format: { type: 'json_object' },
+      // The final answer is one JSON object; while tools are offered the model may call them first instead
+      ...(body.tools?.length ? { tools: body.tools, tool_choice: 'auto' } : { response_format: { type: 'json_object' } }),
       temperature: 0.4,
       max_tokens: MAX_OUTPUT_TOKENS,
       messages: [{ role: 'system', content: body.system }, ...fitted],
@@ -182,7 +207,8 @@ async function handleAi(request, env, who) {
   if (!upstream.ok) return error(`openrouter returned ${upstream.status}`, 502)
 
   const data = await upstream.json()
-  if (typeof data?.choices?.[0]?.message?.content !== 'string') {
+  const message = data?.choices?.[0]?.message
+  if (typeof message?.content !== 'string' && !(Array.isArray(message?.tool_calls) && message.tool_calls.length)) {
     return error('unexpected response from openrouter', 502)
   }
   const app = request.headers.get('X-App') === 'hub' ? 'hub' : 'mymaps'

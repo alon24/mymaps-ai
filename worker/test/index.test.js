@@ -276,3 +276,44 @@ describe('context limit', () => {
     expect(res.status).toBe(413)
   })
 })
+
+describe('tool calls (AI place search)', () => {
+  const tools = [{ type: 'function', function: { name: 'search_places', description: 'find places', parameters: { type: 'object', properties: { category: { type: 'string' } } } } }]
+  it('passes tools upstream and returns tool_calls (no JSON mode while tools are offered)', async () => {
+    const sent = []
+    mockFetch(async (_u, init) => {
+      sent.push(JSON.parse(init.body))
+      return Response.json({ choices: [{ message: { role: 'assistant', content: null, tool_calls: [{ id: 'c1', type: 'function', function: { name: 'search_places', arguments: '{"category":"cafe"}' } }] } }] })
+    })
+    const res = await worker.fetch(aiReq({ system: 's', messages: [{ role: 'user', content: 'cafes?' }], tools }), env)
+    expect(res.status).toBe(200)
+    expect((await res.json()).choices[0].message.tool_calls[0].id).toBe('c1')
+    expect(sent[0].tools[0].function.name).toBe('search_places')
+    expect(sent[0].response_format).toBeUndefined()
+  })
+
+  it('accepts the tool round trip in the conversation', async () => {
+    const sent = []
+    mockFetch(async (_u, init) => {
+      sent.push(JSON.parse(init.body))
+      return completion('{"reply":"ok"}')
+    })
+    const messages = [
+      { role: 'user', content: 'cafes?' },
+      { role: 'assistant', content: null, tool_calls: [{ id: 'c1', type: 'function', function: { name: 'search_places', arguments: '{}' } }] },
+      { role: 'tool', tool_call_id: 'c1', content: '[{"id":"r1","name":"Cafe"}]' },
+    ]
+    const res = await worker.fetch(aiReq({ system: 's', messages, tools }), env)
+    expect(res.status).toBe(200)
+    expect(sent[0].messages.map((m) => m.role)).toEqual(['system', 'user', 'assistant', 'tool'])
+    expect(sent[0].messages[3].tool_call_id).toBe('c1')
+  })
+
+  it('rejects malformed tool messages and oversized tool lists', async () => {
+    mockFetch(async () => completion('{}'))
+    const bad = await worker.fetch(aiReq({ system: 's', messages: [{ role: 'user', content: 'x' }, { role: 'tool', content: 'r' }], tools }), env)
+    expect(bad.status).toBe(400)
+    const many = await worker.fetch(aiReq({ system: 's', messages: [{ role: 'user', content: 'x' }], tools: Array(9).fill(tools[0]) }), env)
+    expect(many.status).toBe(400)
+  })
+})
