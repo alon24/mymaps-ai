@@ -112,9 +112,10 @@ Priority: **P0** = v1 must, **P1** = v1 should, **P2** = later.
 - P0 Touch: renaming the map or a layer is a long press (click on desktop), with ✓ / ✕ buttons; a plain tap never starts a rename. The phone sheet drags from its whole header; the app disables pull-to-refresh so dragging never reloads it.
 
 ### 4.8 Google Drive storage and sharing
-- P0 Sign in with Google (scope `drive.file` only — the app sees only files it created or the user opened with it).
+- P0 Sign in with Google (scopes `openid email profile drive.file`: Drive access stays `drive.file` only, so the app sees only files it created or the user opened with it).
+- P0 **One sign-in for the travel suite** (Travel Hub AI, Skyhop, MyMaps AI on alon24.github.io, same OAuth client): signing in to any of them signs in to the others through Travel Hub's `travel-hub.session` in localStorage (`src/google/suite.ts`). Every app asks for the same scopes, so the shared token also opens MyMaps AI's Drive files. Signing out drops the shared copy of that token.
 - P0 **Drive-first when signed in**: a "Sign in" button in the panel header (Google). Once signed in, every map with content is stored in Drive automatically (local-only maps are uploaded on sign-in; new maps on their first edit), so any device signed in to the same Google account sees the same maps. A "My maps" button in the header lists the Drive maps first, then maps that exist only on this device.
-- P0 Sign-in survives a reload until the Google access token expires (~1 hour; drive.file only). After that, one click on the sync badge or "Sign in" reconnects — no popup ever opens without a click.
+- P0 Sign-in survives a reload until the Google access token expires (~1 hour). After that, one click on the sync badge or "Sign in" reconnects — no popup ever opens without a click.
 - P0 On startup while signed in, the open Drive map is refreshed from Drive (picks up edits made on another device).
 - P0 Save map to Drive (`<title>.mymap.json` in a "MyMaps AI" folder); autosave to Drive after edits (debounced).
 - P0 List and open the user's Drive maps. Delete a map the user owns: moves the Drive file to the Drive trash (recoverable 30 days), removes the local copy, switches away if it was open; the toast offers Undo.
@@ -152,7 +153,7 @@ Priority: **P0** = v1 must, **P1** = v1 should, **P2** = later.
 - **Performance**: 1,000 features render and pan smoothly on a mid-range phone; app shell loads < 2 s on 4G after first visit.
 - **Offline**: app shell and opened maps available offline; tiles for viewed areas cached (bounded cache); edits queue to Drive when back online.
 - **Accessibility**: keyboard reachable controls, visible focus, labels on icon buttons, 4.5:1 text contrast, touch targets ≥ 44px.
-- **Privacy & security**: no backend DB; maps live in IndexedDB and the user's Drive. AI requests send map content to OpenRouter through the Worker; the Worker requires a verified Google sign-in for this app (or the admin token), holds the only API key, limits body size. No secrets in the repo or bundle. `drive.file` scope only.
+- **Privacy & security**: no backend DB; maps live in IndexedDB and the user's Drive. AI requests send map content to OpenRouter through the Worker; the Worker requires a verified Google sign-in for this app (or the admin token), holds the only API key, limits body size. No secrets in the repo or bundle. Drive scope is `drive.file` only.
 - **Cost**: GitHub Pages and Cloudflare free tiers; AI cost ≈ cents per day of use with Claude Haiku 5.5, capped per person per day. Nominatim within its usage policy (≤ 1 req/s, attribution).
 - **Quality**: end-to-end tests (Playwright, desktop + phone viewport) for scenarios 1–3 and 7; unit tests for all import/export, model operations, itinerary math, AI action validation/application, Drive sync logic; CI runs tests and build on every push; deploy only from green `main`.
 
