@@ -528,3 +528,18 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); ou
   .fab__menu button { all: unset; box-sizing: border-box; width: 100%; display: flex; align-items: center; gap: 12px; padding: 12px; border-radius: 8px; cursor: pointer; }
   .fab__menu button:hover, .fab__menu button:focus-visible { background: var(--raise); }
 }
+
+/* Settings: owner-only fields folded away */
+.advanced { margin-top: 14px; border: 1px dashed var(--line); border-radius: 10px; padding: 8px 12px; }
+.advanced summary { cursor: pointer; color: var(--muted); font-weight: 600; }
+.advanced[open] summary { margin-bottom: 8px; }
+
+/* First-run intro */
+.intro { display: grid; justify-items: center; text-align: center; gap: 8px; padding: 4px 4px 0; }
+.intro__icon { display: grid; place-items: center; width: 68px; height: 68px; border-radius: 50%; background: color-mix(in srgb, var(--accent) 12%, var(--panel)); color: var(--accent); }
+.intro h3 { margin: 4px 0 0; font-family: var(--display); font-weight: 400; font-size: 1.35rem; }
+.intro p { margin: 0; line-height: 1.55; max-width: 34ch; }
+.intro__dots { display: flex; gap: 6px; margin: 6px 0 2px; }
+.intro__dots span { width: 8px; height: 8px; border-radius: 50%; background: var(--line); transition: width 200ms ease-out, background 200ms; }
+.intro__dots span.is-on { width: 22px; border-radius: 4px; background: var(--accent); }
+.intro__actions { justify-content: center; align-items: center; }

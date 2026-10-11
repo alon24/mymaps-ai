@@ -3,6 +3,10 @@ import { readFileSync } from 'node:fs'
 
 // Map tiles and fonts are external; tests don't need them.
 test.beforeEach(async ({ page }) => {
+  // The first-run intro has its own test; skip it everywhere else
+  await page.addInitScript(() => {
+    if (!sessionStorage.getItem('e2e-show-intro')) localStorage.setItem('mymaps-ai.intro-seen', '1')
+  })
   await page.route(/tile\.openstreetmap|arcgisonline|opentopomap|fonts\.(googleapis|gstatic)|nominatim/, (r) => r.abort())
   await page.goto('/')
   await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
@@ -256,4 +260,28 @@ test('phone ➕ adds a point at the map center; desktop keeps the tool strip', a
   await page.getByRole('menuitem', { name: 'נקודה במרכז המפה' }).click()
   await expect(page.locator('.frow')).toHaveCount(1)
   await expect(page.locator('.toast')).toContainText('נוסף')
+})
+
+test('first launch shows a short intro once', async ({ page }) => {
+  await page.evaluate(() => {
+    localStorage.removeItem('mymaps-ai.intro-seen')
+    sessionStorage.setItem('e2e-show-intro', '1')
+  })
+  await page.reload()
+  const intro = page.getByRole('dialog', { name: 'ברוך הבא ל-MyMaps AI' })
+  await expect(intro).toBeVisible()
+  await intro.getByRole('button', { name: 'הבא' }).click()
+  await intro.getByRole('button', { name: 'הבא' }).click()
+  await intro.getByRole('button', { name: 'התחל' }).click()
+  await expect(intro).toBeHidden()
+  await page.reload()
+  await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
+  await expect(page.getByRole('dialog', { name: 'ברוך הבא ל-MyMaps AI' })).toBeHidden()
+})
+
+test('settings show the AI connection check', async ({ page }) => {
+  await page.getByRole('button', { name: 'תפריט' }).click()
+  await page.getByRole('menuitem', { name: /הגדרות/ }).click()
+  const dlg = page.getByRole('dialog', { name: 'הגדרות' })
+  await expect(dlg.getByRole('button', { name: 'בדוק חיבור' })).toBeVisible()
 })

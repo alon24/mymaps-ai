@@ -104,6 +104,10 @@ Priority: **P0** = v1 must, **P1** = v1 should, **P2** = later.
 - P0 Itinerary HTML (see 4.5).
 - P0 Round-trip guarantee: export → import keeps layers, names, descriptions, colors, icons and geometry (tested).
 
+- P0 Phone: one floating ➕ button replaces the drawing-tools strip (point at map center / at my location / by tapping, line, area, measure, search); it turns into ✕ while a tool is active.
+- P0 First launch: three short skippable intro screens (add places, layers and trip days, sign in for Drive + AI); never on top of a shared/imported map link.
+- P0 Settings: account and "check AI connection" first; the Worker address and admin APP_TOKEN sit under "Advanced" when Google sign-in is configured.
+- P1 Fast first load: dialogs, the AI tab, import/export libraries and the drawing library load on demand (first-load JS ~540 KB, was ~990 KB).
 - P0 Feature editor (phone-friendly): header pinned with name (✎ → rename with ✓/✕), Delete (undo in toast) and Close. Points: *Fix location* — search an address or paste coordinates, pick a result, the point moves (one undo step); dragging the pin also works. Feature rows rename on long press, like layers.
 - P0 Touch: renaming the map or a layer is a long press (click on desktop), with ✓ / ✕ buttons; a plain tap never starts a rename. The phone sheet drags from its whole header; the app disables pull-to-refresh so dragging never reloads it.
 

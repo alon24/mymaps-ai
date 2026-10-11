@@ -7,6 +7,7 @@ import { ItineraryPanel } from './components/ItineraryPanel'
 import { FeatureEditor } from './components/FeatureEditor'
 import { Dialogs } from './components/Dialogs'
 import { AddFab } from './components/AddFab'
+import { Intro } from './components/Intro'
 import { Icon, IconButton, RenameField } from './components/ui'
 import { useLongPress } from './lib/longPress'
 import { useMapStore } from './store/mapStore'
@@ -471,6 +472,7 @@ export default function App() {
       {/* Outside the stage so it sits above the panel / bottom sheet too */}
       {gate && <AccessGate outcome={gate.outcome} retry={retry} />}
       <AddFab />
+      <Intro />
       <Toast />
       <Dialogs />
     </div>
