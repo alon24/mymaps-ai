@@ -87,6 +87,9 @@ const parseClock = (s?: string): number | null => {
   return m ? Number(m[1]) * 60 + Number(m[2]) : null
 }
 
+/** "09:00–10:00" kept left-to-right inside Hebrew text (Unicode isolate), so it never reads backwards. */
+export const clockRange = (from: number, to: number): string => `\u2066${formatClock(from)}–${formatClock(to)}\u2069`
+
 /** "09:05"; past midnight → "00:20 (+1)" */
 export function formatClock(minutes: number): string {
   const m = Math.round(minutes)

@@ -1,7 +1,7 @@
 import type { MapDoc } from '../model/types'
 import type { RouteResult } from '../geo/routing'
 import { formatDuration, TRAVEL_LABEL } from '../geo/routing'
-import { appFeatureUrl, daySchedule, dayRouteUrls, formatClock, googleSearchUrl, navigateUrl, tripDays, type Day } from '../model/itinerary'
+import { appFeatureUrl, clockRange, daySchedule, dayRouteUrls, googleSearchUrl, navigateUrl, tripDays, type Day } from '../model/itinerary'
 import { formatDistance } from '../geo/measure'
 
 const esc = (s: string) =>
@@ -73,7 +73,7 @@ export function itineraryHtml(doc: MapDoc, opts: ItineraryOptions): string {
           return `<li class="stop" data-lat="${s.lat}" data-lng="${s.lng}">
   <div class="num" style="background:${esc(day.layer.color)}">${s.number}</div>
   <div class="body">
-    <div class="leg">${[time ? `<strong>${formatClock(time.arrive)}–${formatClock(time.leave)}</strong>` : '', leg ? `${formatDuration(leg.seconds)} · ${formatDistance(leg.meters)} מהעצירה הקודמת` : s.legMeters ? `${formatDistance(s.legMeters)} מהעצירה הקודמת` : ''].filter(Boolean).join(' · ')}<span class="me"></span></div>
+    <div class="leg">${[time ? `<strong>${clockRange(time.arrive, time.leave)}</strong>` : '', leg ? `${formatDuration(leg.seconds)} · ${formatDistance(leg.meters)} מהעצירה הקודמת` : s.legMeters ? `${formatDistance(s.legMeters)} מהעצירה הקודמת` : ''].filter(Boolean).join(' · ')}<span class="me"></span></div>
     <h3>${p.icon ? `<span class="icon">${esc(p.icon)}</span> ` : ''}${esc(p.name || 'ללא שם')}</h3>
     ${p.description ? `<p>${richText(stripTags(p.description))}</p>` : ''}
     <div class="links">
@@ -99,7 +99,7 @@ export function itineraryHtml(doc: MapDoc, opts: ItineraryOptions): string {
         : day.totalMeters
           ? `${formatDistance(day.totalMeters)} בקו אווירי`
           : '',
-      sched ? `${formatClock(sched.stops[0].arrive)}–${formatClock(sched.end)}` : '',
+      sched ? clockRange(sched.stops[0].arrive, sched.end) : '',
     ]
       .filter(Boolean)
       .join(' | ')}</div>

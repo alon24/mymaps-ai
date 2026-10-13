@@ -3,7 +3,7 @@ import { useMemo } from 'react'
 import { useMapStore } from '../store/mapStore'
 import { useUi } from '../store/uiStore'
 import * as ops from '../model/ops'
-import { daySchedule, dayRouteUrls, DEFAULT_STAY_MIN, formatClock, navigateUrl, tripDays, type Day } from '../model/itinerary'
+import { clockRange, daySchedule, dayRouteUrls, DEFAULT_STAY_MIN, navigateUrl, tripDays, type Day } from '../model/itinerary'
 import { formatDistance } from '../geo/measure'
 import { formatDate, itineraryHtml } from '../io/itineraryHtml'
 import { downloadBlob } from '../io/download'
@@ -148,7 +148,7 @@ export function ItineraryPanel() {
                       : day.totalMeters
                         ? `${formatDistance(day.totalMeters)} בקו אווירי`
                         : '',
-                    sched ? `${formatClock(sched.stops[0].arrive)}–${formatClock(sched.end)}` : '',
+                    sched ? clockRange(sched.stops[0].arrive, sched.end) : '',
                   ]
                     .filter(Boolean)
                     .join(' · ')}
@@ -185,7 +185,7 @@ export function ItineraryPanel() {
                         {stop && (stop.legMeters > 0 || me || time) && (
                           <span className="stop__leg">
                             {[
-                              time ? `${formatClock(time.arrive)}–${formatClock(time.leave)}` : '',
+                              time ? clockRange(time.arrive, time.leave) : '',
                               leg ? `${formatDuration(leg.seconds)} · ${formatDistance(leg.meters)} מהקודמת` : stop.legMeters > 0 ? `${formatDistance(stop.legMeters)} מהקודמת` : '',
                               distanceFromMe(me, [stop.lng, stop.lat]),
                             ]

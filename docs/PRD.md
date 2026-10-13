@@ -88,7 +88,9 @@ Priority: **P0** = v1 must, **P1** = v1 should, **P2** = later.
 - P0 **Travel companion export**: one self-contained HTML file (works offline, prints well, opens on any phone) with the trip title, each day (date, total distance), and each stop (number, name, description, icon). Every stop has links: *Navigate* (Google Maps directions to the stop), *Search in Google Maps*, *Show on map* (opens the stop in the app when the map is in Drive). Each day has *Open day route in Google Maps* (waypoints). A *Show distance from me* button uses the phone's location to show the distance to each stop and the nearest stop.
 - P0 In-app itinerary view has the same links, so the app itself is the companion on the road.
 - P1 Print-friendly itinerary (browser print of the same view).
-- P2 Time per stop, travel time estimates.
+- P0 **Road routes**: a route layer / trip day travels by straight line, car, foot or bike. Car/foot/bike routes come from the public OSRM servers behind openstreetmap.org (routing.openstreetmap.de; free, light use: one request at a time, cached, long days split), drawn along the roads, with road distance and travel time per leg and per day; Google Maps links open in the same mode. If routing fails, the straight line is shown with a note.
+- P0 **Day times**: departure time and minutes per stop per day (default 60); every stop shows arrive–leave times computed from the road legs; the day shows start–end. Same in the travel-companion HTML.
+- P2 Per-stop visit length (override the day default), opening-hours warnings.
 
 ### 4.6 Import
 - P0 KML and KMZ, including Google My Maps exports: top-level folders → layers (nested folders merged), names, descriptions, colors from styles and from My Maps style ids, MultiGeometry split, Hebrew text.
