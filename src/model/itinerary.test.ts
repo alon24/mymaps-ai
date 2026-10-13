@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import * as ops from './ops'
-import { appFeatureUrl, dayRouteUrls, googleSearchUrl, MAX_WAYPOINTS, sequenceNumbers, tripDays } from './itinerary'
+import { appFeatureUrl, daySchedule, dayRouteUrls, formatClock, googleSearchUrl, MAX_WAYPOINTS, sequenceNumbers, tripDays } from './itinerary'
 import { itineraryHtml, stripTags } from '../io/itineraryHtml'
 
 const pt = (name: string, lng: number, lat: number) => ops.createFeature({ type: 'Point', coordinates: [lng, lat] }, { name })
@@ -111,5 +111,44 @@ describe('route layers', () => {
     expect(ops.hasRoute(ops.setLayerRoute(on, id, false).layers[0])).toBe(false)
     const day = ops.setLayerDay(m, id, { route: true })
     expect(ops.hasRoute(ops.setLayerRoute(day, id, false).layers[0])).toBe(false)
+  })
+})
+
+describe('day schedule (arrival times)', () => {
+  const mk = (start?: string, stay?: number) => {
+    const m = ops.createMap('t')
+    m.layers = [ops.createLayer('יום 1', [pt('א', 34.8, 31.9), pt('ב', 34.81, 31.91), pt('ג', 34.82, 31.92)], { style: 'numbered', day: { route: true, ...(start ? { start } : {}), ...(stay !== undefined ? { stay } : {}) }, travel: 'car' })]
+    return tripDays(m)[0]
+  }
+  const legs = [{ meters: 5000, seconds: 600 }, { meters: 3000, seconds: 1500 }]
+
+  it('departure + travel + time at each stop → arrival and leave times', () => {
+    const s = daySchedule(mk('09:00', 60), { legs })!
+    expect(s.stops.map((x) => [formatClock(x.arrive), formatClock(x.leave)])).toEqual([
+      ['09:00', '10:00'],
+      ['10:10', '11:10'],
+      ['11:35', '12:35'],
+    ])
+    expect(formatClock(s.end)).toBe('12:35')
+    expect(s.travelSeconds).toBe(2100)
+  })
+
+  it('defaults to 60 minutes per stop; nothing without a start time or road legs', () => {
+    expect(formatClock(daySchedule(mk('08:00'), { legs })!.stops[1].arrive)).toBe('09:10')
+    expect(daySchedule(mk(undefined), { legs })).toBeNull()
+    expect(daySchedule(mk('08:00'), undefined)).toBeNull()
+  })
+
+  it('marks times past midnight', () => {
+    expect(formatClock(23 * 60 + 50 + 30)).toBe('00:20 (+1)')
+  })
+
+  it('the travel-companion HTML shows arrival times and road legs', () => {
+    const m = ops.createMap('t')
+    m.layers = [ops.createLayer('יום 1', [pt('א', 34.8, 31.9), pt('ב', 34.81, 31.91), pt('ג', 34.82, 31.92)], { style: 'numbered', day: { route: true, start: '09:00', stay: 60 }, travel: 'car' })]
+    const html = itineraryHtml(m, { appBase: 'https://x/', routes: { [m.layers[0].id]: { legs, line: [] } } })
+    expect(html).toContain('09:00–10:00')
+    expect(html).toContain('10:10–11:10')
+    expect(html).toContain('ברכב')
   })
 })

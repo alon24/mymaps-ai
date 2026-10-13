@@ -73,3 +73,9 @@ export function startRouting(): () => void {
     unsub()
   }
 }
+
+/** Current road routes of a document's layers (for exports). */
+export function routesByLayer(doc: { layers: Layer[] }): Record<string, RouteResult | undefined> {
+  const byLayer = useRoutes.getState().byLayer
+  return Object.fromEntries(doc.layers.map((l) => [l.id, currentRoute(l, byLayer)]))
+}

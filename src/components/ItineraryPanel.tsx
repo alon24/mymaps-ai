@@ -1,8 +1,9 @@
+import { routesByLayer } from '../store/routeStore'
 import { useMemo } from 'react'
 import { useMapStore } from '../store/mapStore'
 import { useUi } from '../store/uiStore'
 import * as ops from '../model/ops'
-import { dayRouteUrls, navigateUrl, tripDays } from '../model/itinerary'
+import { daySchedule, dayRouteUrls, DEFAULT_STAY_MIN, formatClock, navigateUrl, tripDays, type Day } from '../model/itinerary'
 import { formatDistance } from '../geo/measure'
 import { formatDate, itineraryHtml } from '../io/itineraryHtml'
 import { downloadBlob } from '../io/download'
@@ -11,6 +12,46 @@ import { EmptyArt, Icon } from './ui'
 import { appBase } from '../lib/appBase'
 import { distanceFromMe } from '../lib/location'
 import { googleSearchUrl } from '../model/itinerary'
+import { currentRoute, useRoutes } from '../store/routeStore'
+import { formatDuration, TRAVEL_LABEL } from '../geo/routing'
+import { TravelPicker } from './LayersPanel'
+
+const STAY_OPTIONS = [15, 30, 45, 60, 90, 120, 180]
+
+/** Departure time, minutes per stop and how to travel, for one day. */
+function DayTimes({ day }: { day: Day }) {
+  const apply = useMapStore((s) => s.apply)
+  const d = day.layer.day!
+  const set = (patch: Partial<typeof d>) => apply((doc) => ops.setLayerDay(doc, day.layer.id, { ...d, ...patch }))
+  return (
+    <div className="day__times">
+      <TravelPicker layer={day.layer} />
+      <label className="day__time">
+        <span>יציאה</span>
+        <input
+          type="time"
+          value={d.start ?? ''}
+          onChange={(e) => {
+            const { start: _s, ...rest } = d
+            void _s
+            apply((doc) => ops.setLayerDay(doc, day.layer.id, e.target.value ? { ...rest, start: e.target.value } : rest))
+          }}
+          aria-label={`שעת יציאה ב${day.layer.name}`}
+        />
+      </label>
+      <label className="day__time">
+        <span>בכל עצירה</span>
+        <select value={d.stay ?? DEFAULT_STAY_MIN} onChange={(e) => set({ stay: Number(e.target.value) })} aria-label={`זמן בכל עצירה ב${day.layer.name}`}>
+          {STAY_OPTIONS.map((m) => (
+            <option key={m} value={m}>
+              {m < 60 ? `${m} דק'` : m % 60 ? `${Math.floor(m / 60)}:${String(m % 60).padStart(2, '0')} ש'` : `${m / 60} ש'`}
+            </option>
+          ))}
+        </select>
+      </label>
+    </div>
+  )
+}
 
 export function ItineraryPanel() {
   const doc = useMapStore((s) => s.doc)
@@ -20,6 +61,7 @@ export function ItineraryPanel() {
   const { apply, select } = useMapStore.getState()
   const focusOn = useUi((s) => s.focusOn)
   const days = useMemo(() => tripDays(doc), [doc])
+  const byLayer = useRoutes((s) => s.byLayer)
   const unscheduled = useMemo(
     () => doc.layers.filter((l) => !l.day).flatMap((l) => l.features.filter((f) => f.geometry.type === 'Point').map((f) => ({ f, layer: l }))),
     [doc],
@@ -40,7 +82,7 @@ export function ItineraryPanel() {
   }
 
   const exportHtml = () => {
-    const html = itineraryHtml(doc, { appBase: appBase() })
+    const html = itineraryHtml(doc, { appBase: appBase(), routes: routesByLayer(doc) })
     downloadBlob(new Blob([html], { type: 'text/html;charset=utf-8' }), `${(doc.title || 'trip').replace(/[\\/:*?"<>|]+/g, '_')} - מסלול.html`)
     useUi.getState().showToast(doc.driveFileId ? 'קובץ המסלול הורד' : 'קובץ המסלול הורד. שמור את המפה ב-Drive כדי שיהיו בו גם קישורים חזרה למפה.')
   }
@@ -86,14 +128,30 @@ export function ItineraryPanel() {
       )}
 
       {days.map((day) => {
-        const routes = dayRouteUrls(day.stops)
+        const routes = dayRouteUrls(day.stops, day.layer.travel)
+        const road = currentRoute(day.layer, byLayer)
+        const routing = day.layer.travel && day.stops.length > 1 && !road ? byLayer[day.layer.id]?.status : undefined
+        const sched = daySchedule(day, road)
+        const roadMeters = road?.legs.reduce((a, l) => a + l.meters, 0)
+        const roadSeconds = road?.legs.reduce((a, l) => a + l.seconds, 0)
         return (
           <section key={day.layer.id} className="day" style={{ '--c': day.layer.color } as React.CSSProperties}>
             <header className="day__head">
               <button type="button" className="day__title" onClick={() => focusOn({ layerId: day.layer.id })}>
                 <strong>{day.layer.name}</strong>
                 <span>
-                  {[formatDate(day.layer.day?.date), `${day.stops.length} עצירות`, day.totalMeters ? formatDistance(day.totalMeters) : ''].filter(Boolean).join(' · ')}
+                  {[
+                    formatDate(day.layer.day?.date),
+                    `${day.stops.length} עצירות`,
+                    road && day.layer.travel
+                      ? `${formatDistance(roadMeters!)} · ${formatDuration(roadSeconds!)} ${TRAVEL_LABEL[day.layer.travel]}`
+                      : day.totalMeters
+                        ? `${formatDistance(day.totalMeters)} בקו אווירי`
+                        : '',
+                    sched ? `${formatClock(sched.stops[0].arrive)}–${formatClock(sched.end)}` : '',
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
                 </span>
               </button>
               {routes.map((u, i) => (
@@ -102,9 +160,15 @@ export function ItineraryPanel() {
                 </a>
               ))}
             </header>
+            {!readOnly && <DayTimes day={day} />}
+            {routing === 'loading' && <p className="hint">מחשב מסלול בכבישים…</p>}
+            {routing === 'error' && <p className="hint">לא הצלחתי לחשב מסלול בכבישים כרגע; מוצג קו אווירי.</p>}
             <ol className="stops" data-sort-list={day.layer.id} data-sort-scroll>
               {day.layer.features.map((f) => {
                 const stop = day.stops.find((s) => s.feature === f)
+                const idx = stop ? day.stops.indexOf(stop) : -1
+                const leg = road && idx > 0 ? road.legs[idx - 1] : undefined
+                const time = sched && idx >= 0 ? sched.stops[idx] : undefined
                 return (
                   <li key={f.properties.id} className={`stop ${selectedId === f.properties.id ? 'is-selected' : ''}`} data-sort-item={f.properties.id}>
                     {sortHandle()}
@@ -118,9 +182,15 @@ export function ItineraryPanel() {
                     >
                       <span className="stop__num">{stop ? stop.number : '–'}</span>
                       <span className="stop__text">
-                        {stop && (stop.legMeters > 0 || me) && (
+                        {stop && (stop.legMeters > 0 || me || time) && (
                           <span className="stop__leg">
-                            {[stop.legMeters > 0 ? `${formatDistance(stop.legMeters)} מהקודמת` : '', distanceFromMe(me, [stop.lng, stop.lat])].filter(Boolean).join(' · ')}
+                            {[
+                              time ? `${formatClock(time.arrive)}–${formatClock(time.leave)}` : '',
+                              leg ? `${formatDuration(leg.seconds)} · ${formatDistance(leg.meters)} מהקודמת` : stop.legMeters > 0 ? `${formatDistance(stop.legMeters)} מהקודמת` : '',
+                              distanceFromMe(me, [stop.lng, stop.lat]),
+                            ]
+                              .filter(Boolean)
+                              .join(' · ')}
                           </span>
                         )}
                         <span className="stop__name">

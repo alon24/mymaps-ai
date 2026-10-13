@@ -1,3 +1,4 @@
+import { routesByLayer } from '../../store/routeStore'
 import { useMapStore } from '../../store/mapStore'
 import { downloadBlob, exportDoc, type ExportFormat } from '../../io'
 import { itineraryHtml } from '../../io/itineraryHtml'
@@ -38,7 +39,7 @@ export function ExportDialog() {
             type="button"
             className="export__item"
             disabled={!hasDays}
-            onClick={() => downloadBlob(new Blob([itineraryHtml(doc, { appBase: appBase() })], { type: 'text/html;charset=utf-8' }), `${doc.title || 'trip'} - מסלול.html`)}
+            onClick={() => downloadBlob(new Blob([itineraryHtml(doc, { appBase: appBase(), routes: routesByLayer(doc) })], { type: 'text/html;charset=utf-8' }), `${doc.title || 'trip'} - מסלול.html`)}
           >
             <Icon name="route" />
             <span>

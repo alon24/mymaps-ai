@@ -65,6 +65,61 @@ export function tripDays(doc: MapDoc): Day[] {
   })
 }
 
+// ---------- Day times ----------
+
+export interface TimedStop {
+  /** minutes since midnight of the day */
+  arrive: number
+  leave: number
+}
+
+export interface DaySchedule {
+  stops: TimedStop[]
+  /** when the last stop's visit ends (minutes since midnight) */
+  end: number
+  travelSeconds: number
+}
+
+export const DEFAULT_STAY_MIN = 60
+
+const parseClock = (s?: string): number | null => {
+  const m = s?.match(/^(\d{2}):(\d{2})$/)
+  return m ? Number(m[1]) * 60 + Number(m[2]) : null
+}
+
+/** "09:05"; past midnight → "00:20 (+1)" */
+export function formatClock(minutes: number): string {
+  const m = Math.round(minutes)
+  const day = Math.floor(m / 1440)
+  const t = ((m % 1440) + 1440) % 1440
+  const hhmm = `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`
+  return day > 0 ? `${hhmm} (+${day})` : hhmm
+}
+
+/**
+ * Arrival and leave times for a day: departure (day.start) at the first stop, then travel time from
+ * the road route between stops and `stay` minutes at each. Null without a start time or road legs.
+ */
+export function daySchedule(day: Day, road?: { legs: { seconds: number }[] }): DaySchedule | null {
+  const start = parseClock(day.layer.day?.start)
+  if (start === null || !day.stops.length) return null
+  if (day.stops.length > 1 && (!road || road.legs.length < day.stops.length - 1)) return null
+  const stay = day.layer.day?.stay ?? DEFAULT_STAY_MIN
+  const stops: TimedStop[] = []
+  let t = start
+  let travelSeconds = 0
+  day.stops.forEach((_, i) => {
+    if (i > 0) {
+      const s = road!.legs[i - 1].seconds
+      travelSeconds += s
+      t += s / 60
+    }
+    stops.push({ arrive: Math.round(t), leave: Math.round(t + stay) })
+    t += stay
+  })
+  return { stops, end: stops.at(-1)!.leave, travelSeconds }
+}
+
 // ---------- Google Maps links (official Maps URLs, no API key) ----------
 
 const ll = (s: { lat: number; lng: number }) => `${s.lat},${s.lng}`

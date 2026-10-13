@@ -1,5 +1,7 @@
 import type { MapDoc } from '../model/types'
-import { appFeatureUrl, dayRouteUrls, googleSearchUrl, navigateUrl, tripDays, type Day } from '../model/itinerary'
+import type { RouteResult } from '../geo/routing'
+import { formatDuration, TRAVEL_LABEL } from '../geo/routing'
+import { appFeatureUrl, daySchedule, dayRouteUrls, formatClock, googleSearchUrl, navigateUrl, tripDays, type Day } from '../model/itinerary'
 import { formatDistance } from '../geo/measure'
 
 const esc = (s: string) =>
@@ -48,24 +50,30 @@ ${pts.map((p, i) => `<g><circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" 
 export interface ItineraryOptions {
   /** App URL (origin + base path) for "show on map" links */
   appBase: string
+  /** Road routes by layer id (when computed), for travel times and arrival times */
+  routes?: Record<string, RouteResult | undefined>
 }
 
 export function itineraryHtml(doc: MapDoc, opts: ItineraryOptions): string {
   const days = tripDays(doc)
   const dayBlocks = days
     .map((day, di) => {
-      const routes = dayRouteUrls(day.stops)
+      const routes = dayRouteUrls(day.stops, day.layer.travel)
+      const road = opts.routes?.[day.layer.id]
+      const sched = daySchedule(day, road)
       const routeLinks = routes
         .map((u, i) => `<a class="btn primary" href="${esc(u)}" target="_blank" rel="noopener">מסלול ${routes.length > 1 ? `חלק ${i + 1}` : 'היום'} ב-Google Maps</a>`)
         .join('')
       const stops = day.stops
-        .map((s) => {
+        .map((s, si) => {
           const p = s.feature.properties
+          const leg = road && si > 0 ? road.legs[si - 1] : undefined
+          const time = sched?.stops[si]
           const inApp = appFeatureUrl(opts.appBase, doc.driveFileId, p.id)
           return `<li class="stop" data-lat="${s.lat}" data-lng="${s.lng}">
   <div class="num" style="background:${esc(day.layer.color)}">${s.number}</div>
   <div class="body">
-    <div class="leg">${s.legMeters ? `${formatDistance(s.legMeters)} מהעצירה הקודמת` : ''}<span class="me"></span></div>
+    <div class="leg">${[time ? `<strong>${formatClock(time.arrive)}–${formatClock(time.leave)}</strong>` : '', leg ? `${formatDuration(leg.seconds)} · ${formatDistance(leg.meters)} מהעצירה הקודמת` : s.legMeters ? `${formatDistance(s.legMeters)} מהעצירה הקודמת` : ''].filter(Boolean).join(' · ')}<span class="me"></span></div>
     <h3>${p.icon ? `<span class="icon">${esc(p.icon)}</span> ` : ''}${esc(p.name || 'ללא שם')}</h3>
     ${p.description ? `<p>${richText(stripTags(p.description))}</p>` : ''}
     <div class="links">
@@ -83,7 +91,18 @@ export function itineraryHtml(doc: MapDoc, opts: ItineraryOptions): string {
       return `<section class="day" id="day-${di + 1}">
   <header style="border-color:${esc(day.layer.color)}">
     <h2>${esc(day.layer.name)}</h2>
-    <div class="meta">${[formatDate(day.layer.day?.date), `${day.stops.length} עצירות`, day.totalMeters ? `${formatDistance(day.totalMeters)} בקו אווירי` : ''].filter(Boolean).join(' | ')}</div>
+    <div class="meta">${[
+      formatDate(day.layer.day?.date),
+      `${day.stops.length} עצירות`,
+      road && day.layer.travel
+        ? `${formatDistance(road.legs.reduce((a, l) => a + l.meters, 0))} · ${formatDuration(road.legs.reduce((a, l) => a + l.seconds, 0))} ${TRAVEL_LABEL[day.layer.travel]}`
+        : day.totalMeters
+          ? `${formatDistance(day.totalMeters)} בקו אווירי`
+          : '',
+      sched ? `${formatClock(sched.stops[0].arrive)}–${formatClock(sched.end)}` : '',
+    ]
+      .filter(Boolean)
+      .join(' | ')}</div>
     <div class="links">${routeLinks}</div>
   </header>
   ${daySketch(day)}

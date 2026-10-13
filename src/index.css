@@ -543,3 +543,9 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); ou
 .intro__dots span { width: 8px; height: 8px; border-radius: 50%; background: var(--line); transition: width 200ms ease-out, background 200ms; }
 .intro__dots span.is-on { width: 22px; border-radius: 4px; background: var(--accent); }
 .intro__actions { justify-content: center; align-items: center; }
+
+/* Itinerary: per-day travel mode, departure time, minutes per stop */
+.day__times { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 6px 4px 10px; }
+.day__times .seg { margin: 0; flex: 1 1 100%; }
+.day__time { display: inline-flex; align-items: center; gap: 6px; font-size: 0.9rem; color: var(--muted); }
+.day__time input, .day__time select { min-height: 36px; padding: 0 8px; border: 1px solid var(--line); border-radius: 9px; background: var(--panel); color: var(--ink); font: inherit; }
