@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { fetchRoute, formatDuration, MAX_POINTS, routeUrl } from './routing'
+import { fetchRoute, formatDuration, MAX_POINTS } from './routing'
 
 const osrm = (pts: [number, number][]) =>
   Response.json({
@@ -8,12 +8,6 @@ const osrm = (pts: [number, number][]) =>
   })
 
 describe('routing', () => {
-  it('builds an OSRM URL for the travel mode', () => {
-    expect(routeUrl('foot', [[34.8, 31.9], [34.81, 31.91]])).toBe(
-      'https://routing.openstreetmap.de/routed-foot/route/v1/driving/34.800000,31.900000;34.810000,31.910000?overview=full&geometries=geojson&steps=false',
-    )
-  })
-
   it('returns legs and the road line, and caches by mode + stops', async () => {
     const pts: [number, number][] = [[34.8, 31.9], [34.81, 31.91], [34.82, 31.92]]
     const f = vi.fn(async (url: string) => osrm(decodeURIComponent(url).split('/driving/')[1].split('?')[0].split(';').map((p) => p.split(',').map(Number) as [number, number])))

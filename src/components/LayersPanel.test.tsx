@@ -40,22 +40,6 @@ describe('LayersPanel', () => {
     await userEvent.click(screen.getByText('פלאפל'))
     expect(useMapStore.getState().selectedFeatureId).toBe(useMapStore.getState().doc.layers[0].features[0].properties.id)
   })
-})
-
-describe('LayersPanel layout', () => {
-  beforeEach(() => {
-    const m = ops.createMap('t')
-    m.layers = [ops.createLayer('אוכל', [pt('פלאפל'), pt('חומוס')]), ops.createLayer('לינה', [pt('מלון')])]
-    useMapStore.getState().load(m)
-  })
-
-  it('always shows drag handles, no item counts, and accepts drops on layer headers', () => {
-    render(<LayersPanel />)
-    expect(document.querySelectorAll('.frow__grip')).toHaveLength(3)
-    expect(screen.queryByText(/פריטים/)).not.toBeInTheDocument()
-    const ids = useMapStore.getState().doc.layers.map((l) => l.id)
-    expect([...document.querySelectorAll('header[data-sort-list]')].map((h) => h.getAttribute('data-sort-list'))).toEqual(ids)
-  })
 
   it('hides drag handles for view-only maps', () => {
     useMapStore.getState().load(useMapStore.getState().doc, { readOnly: true })

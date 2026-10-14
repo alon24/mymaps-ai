@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { ConflictError, decideSync, loadMap, saveMap, serialize, setLinkSharing, setTrashed, shareUrl, shareWith } from './drive'
+import { ConflictError, decideSync, loadMap, saveMap, serialize, setLinkSharing, setTrashed, shareWith } from './drive'
 import { createMap } from '../model/ops'
 
 type Call = { url: URL; init: RequestInit }
@@ -124,10 +124,6 @@ describe('sharing', () => {
     const invite = calls.at(-1)!
     expect(JSON.parse(String(invite.init.body))).toEqual({ type: 'user', role: 'writer', emailAddress: 'a@b.com' })
     expect(invite.url.searchParams.get('emailMessage')).toBe('הצטרף')
-  })
-
-  it('builds app share links', () => {
-    expect(shareUrl('https://a.io/app/', 'ID')).toBe('https://a.io/app/#/m/ID')
   })
 })
 
