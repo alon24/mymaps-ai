@@ -96,13 +96,21 @@ export function parseOverpass(data: { elements?: OsmElement[] }, center: [number
 }
 
 let queue: Promise<unknown> = Promise.resolve()
+const CACHE_MS = 10 * 60 * 1000
+const cache = new Map<string, { at: number; data: { elements?: OsmElement[] } }>()
 
-/** One Overpass request at a time (fair use of the public server). */
+/** One Overpass request at a time (fair use of the public server); identical queries are cached for 10 minutes. */
 async function overpass(query: string, fetchFn: typeof fetch): Promise<{ elements?: OsmElement[] }> {
+  const hit = cache.get(query)
+  if (hit && Date.now() - hit.at < CACHE_MS) return hit.data
   const run = queue.then(async () => {
+    const again = cache.get(query)
+    if (again && Date.now() - again.at < CACHE_MS) return again.data
     const res = await fetchFn(OVERPASS, { method: 'POST', body: new URLSearchParams({ data: query }) })
     if (!res.ok) throw new Error(`חיפוש המקומות נכשל (${res.status})`)
-    return res.json()
+    const data = (await res.json()) as { elements?: OsmElement[] }
+    cache.set(query, { at: Date.now(), data })
+    return data
   })
   queue = run.catch(() => undefined)
   return run

@@ -104,11 +104,14 @@ export function AiPanel() {
           break
         }
         convo.push({ role: 'assistant', content: r.content, tool_calls: r.tool_calls })
-        for (const c of r.tool_calls) {
-          setProgress(describeCall(c))
-          const result = step < MAX_TOOL_STEPS ? await runTool(c, toolCtx) : JSON.stringify({ error: 'search limit reached: answer now with the final JSON' })
-          convo.push({ role: 'tool', tool_call_id: c.id, content: result })
-        }
+        // The searches of one round are independent: run them together (OSM requests still queue politely)
+        setProgress(r.tool_calls.map(describeCall).join(' · '))
+        const results = await Promise.all(
+          r.tool_calls.map((c) =>
+            step < MAX_TOOL_STEPS ? runTool(c, toolCtx) : Promise.resolve(JSON.stringify({ error: 'search limit reached: answer now with the final JSON' })),
+          ),
+        )
+        r.tool_calls.forEach((c, i) => convo.push({ role: 'tool', tool_call_id: c.id, content: results[i] }))
         setProgress('')
       }
       let res = parseAiResponse(raw)

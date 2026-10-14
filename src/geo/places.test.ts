@@ -32,4 +32,12 @@ describe('places', () => {
     const r = await searchNearby({ center, category: 'restaurant', query: 'sushi' }, f)
     expect(r.map((x) => x.name)).toEqual(['סושי קרוב'])
   })
+
+  it('answers the same search twice from the cache (one Overpass request)', async () => {
+    const f = vi.fn(async () => Response.json(sample)) as unknown as typeof fetch
+    const s = { center: [32.08, 34.78] as [number, number], category: 'cafe' as const }
+    await searchNearby(s, f)
+    await searchNearby(s, f)
+    expect(f).toHaveBeenCalledTimes(1)
+  })
 })
