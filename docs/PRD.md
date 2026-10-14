@@ -138,6 +138,7 @@ Priority: **P0** = v1 must, **P1** = v1 should, **P2** = later.
 - P0 Daily AI cap per person (default 100 calls/day, `DAILY_AI_LIMIT`), counted from the shared audit log, so nobody burns the owner's credit by accident; the app says when it's reached. Admins exempt.
 - P0 Clear setup message when the Worker URL is missing; errors shown in the chat.
 - P1 Model switch without code change (Cloudflare `MODEL` variable); default `anthropic/claude-haiku-5.5` via OpenRouter ($0.10 / $0.50 per million tokens, Oct 2026); `MAX_CONTEXT_TOKENS` 100,000 per request.
+- P1 Web-backed recommendations: `web_search` tool → Worker `/web` (OpenRouter web plugin), once per question, ~$0.02 each, counts toward the daily cap, `WEB_SEARCH=off` to disable; places are still located via OSM and sources are shown.
 - P2 Decision-only engine (e.g. TypeSafe Jev) for cheap classification once available.
 
 ### 4.10 Settings

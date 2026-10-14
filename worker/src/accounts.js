@@ -100,14 +100,14 @@ export const dailyLimit = (env) => {
 }
 
 /**
- * True when this person still has AI calls left today, counted from the audit log (every AI call is logged
- * there already). Admins are never capped; without the database the cap is skipped.
+ * True when this person still has AI calls left today, counted from the audit log (every AI call and web
+ * search is logged there already). Admins are never capped; without the database the cap is skipped.
  */
 export async function withinDailyCap(env, who) {
   if (who.role === 'admin' || !env.DB) return true
   await ensureSchema(env.DB)
   const dayStart = new Date(new Date().toISOString().slice(0, 10)).getTime()
-  const row = await env.DB.prepare("SELECT COUNT(*) AS n FROM audit WHERE email = ? AND action = 'ai' AND ts >= ?")
+  const row = await env.DB.prepare("SELECT COUNT(*) AS n FROM audit WHERE email = ? AND action IN ('ai', 'web') AND ts >= ?")
     .bind(normalizeEmail(who.email), dayStart)
     .first()
   return (row?.n ?? 0) < dailyLimit(env)

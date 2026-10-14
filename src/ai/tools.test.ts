@@ -37,3 +37,25 @@ describe('search_places tool', () => {
     expect(notFound).toEqual(['osm:node/404'])
   })
 })
+
+describe('web_search tool', () => {
+  const call = (args: object, id = 'w1') => ({ id, function: { name: 'web_search', arguments: JSON.stringify(args) } })
+  it('runs once per question, keeps sources, and points the model to search_places', async () => {
+    const web = vi.fn(async () => ({ places: [{ name: 'Café Xoho', town: 'Tel Aviv', why: 'brunch', url: 'https://e.com/a' }], sources: [{ url: 'https://e.com/a', title: 'Best brunch' }] }))
+    const ctx = { mapCenter: [32, 34.8] as [number, number], registry: new Map(), web, webUsed: 0, sources: [] as { url: string; title: string }[] }
+    const first = JSON.parse(await runTool(call({ query: 'best brunch', near: 'Tel Aviv' }), ctx))
+    expect(first.places[0].name).toBe('Café Xoho')
+    expect(first.next).toContain('search_places')
+    expect(web).toHaveBeenCalledWith('best brunch', 'Tel Aviv')
+    expect(ctx.sources).toEqual([{ url: 'https://e.com/a', title: 'Best brunch' }])
+    const second = JSON.parse(await runTool(call({ query: 'again' }, 'w2'), ctx))
+    expect(second.error).toMatch(/already used/)
+    expect(web).toHaveBeenCalledTimes(1)
+  })
+  it('falls back to search_places when unavailable or failing', async () => {
+    const none = JSON.parse(await runTool(call({ query: 'x' }), { mapCenter: [0, 0], registry: new Map() }))
+    expect(none.error).toMatch(/not available/)
+    const failing = JSON.parse(await runTool(call({ query: 'x' }), { mapCenter: [0, 0], registry: new Map(), web: async () => { throw new Error('boom') } }))
+    expect(failing.error).toBe('boom')
+  })
+})

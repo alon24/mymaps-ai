@@ -89,6 +89,28 @@ export async function askAiStep(settings: Settings, system: string, messages: To
   return { content: typeof m?.content === 'string' ? m.content : null, ...(calls ? { tool_calls: calls } : {}) }
 }
 
+export interface WebPlace {
+  name: string
+  town: string
+  why: string
+  url: string
+}
+export interface WebResult {
+  places: WebPlace[]
+  sources: { url: string; title: string }[]
+}
+
+/** One web search for recommendations (Worker → OpenRouter web plugin). */
+export async function webSearch(settings: Settings, query: string, near?: string): Promise<WebResult> {
+  const res = await call(settings, '/web', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query, ...(near ? { near } : {}) }),
+  })
+  const data = (await res.json()) as Partial<WebResult>
+  return { places: Array.isArray(data.places) ? data.places : [], sources: Array.isArray(data.sources) ? data.sources : [] }
+}
+
 export async function askAi(settings: Settings, system: string, messages: ChatMessage[]): Promise<string> {
   const res = await call(settings, '/ai', {
     method: 'POST',

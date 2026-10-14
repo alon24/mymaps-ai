@@ -217,6 +217,70 @@ async function handleAi(request, env, who) {
   return json(data)
 }
 
+/*
+ * POST /web { query, near? } → { places: [{name, town, why, url}], sources: [{url, title}] }
+ * One web search through OpenRouter's web plugin (5 results, ~$0.02) for "recommend / best / popular"
+ * questions. The app's AI calls it as a tool at most once per question, then locates each place on
+ * OpenStreetMap. Counts toward the daily cap; WEB_SEARCH="off" disables it.
+ */
+const WEB_PROMPT =
+  'You research places for a trip-planning app. Using the web results, list up to 8 specific, real places that answer the request ' +
+  '(well reviewed, currently operating). Reply with JSON only: {"places":[{"name":"<exact name as locals write it>","town":"<town or city>",' +
+  '"why":"<one short line: what it is and why it is recommended>","url":"<the source url>"}]}'
+
+async function handleWeb(request, env, who) {
+  if (String(env.WEB_SEARCH || '').toLowerCase() === 'off') return error('web search is off', 503)
+  let body
+  try {
+    body = await request.json()
+  } catch {
+    return error('invalid JSON', 400)
+  }
+  const query = typeof body?.query === 'string' ? body.query.trim() : ''
+  const near = typeof body?.near === 'string' ? body.near.trim().slice(0, 100) : ''
+  if (!query || query.length > 300) return error('query must be 1–300 characters', 400)
+  if (!env.OPENROUTER_API_KEY) return error('OPENROUTER_API_KEY is not configured', 500)
+  if (!(await withinDailyCap(env, who))) return json({ error: 'daily limit reached', limit: dailyLimit(env) }, 429)
+
+  const upstream = await fetch(OPENROUTER_URL, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${env.OPENROUTER_API_KEY}`, 'Content-Type': 'application/json', 'X-Title': 'MyMaps AI' },
+    body: JSON.stringify({
+      model: env.MODEL || DEFAULT_MODEL,
+      plugins: [{ id: 'web', max_results: 5 }],
+      response_format: { type: 'json_object' },
+      temperature: 0.2,
+      max_tokens: 1500,
+      messages: [
+        { role: 'system', content: WEB_PROMPT },
+        { role: 'user', content: near ? `${query} (near ${near})` : query },
+      ],
+    }),
+  })
+  if (!upstream.ok) return error(`openrouter returned ${upstream.status}`, 502)
+  const data = await upstream.json()
+  const message = data?.choices?.[0]?.message
+  let places = []
+  try {
+    const text = String(message?.content || '')
+    const parsed = JSON.parse(text.slice(text.indexOf('{'), text.lastIndexOf('}') + 1))
+    places = (Array.isArray(parsed?.places) ? parsed.places : [])
+      .filter((p) => p && typeof p.name === 'string' && p.name.trim())
+      .slice(0, 8)
+      .map((p) => ({ name: String(p.name).slice(0, 120), town: String(p.town || '').slice(0, 80), why: String(p.why || '').slice(0, 200), url: String(p.url || '').slice(0, 500) }))
+  } catch {
+    /* no usable list: the app says so */
+  }
+  const sources = (Array.isArray(message?.annotations) ? message.annotations : [])
+    .map((a) => a?.url_citation)
+    .filter((c) => c && typeof c.url === 'string' && /^https?:\/\//.test(c.url))
+    .slice(0, 8)
+    .map((c) => ({ url: c.url, title: String(c.title || '').slice(0, 120) }))
+  const tokens = Number.isFinite(data?.usage?.total_tokens) ? data.usage.total_tokens : null
+  await audit(env, { email: who.email, app: 'mymaps', action: 'web', detail: query.slice(0, 200), tokens })
+  return json({ places, sources })
+}
+
 async function handleAdmin(request, env, who, url) {
   if (who.role !== 'admin') return error('admins only', 403)
   if (!env.DB) return error('the users database is not configured', 503)
@@ -253,6 +317,7 @@ export default {
       if (url.pathname.startsWith('/admin/')) return await handleAdmin(request, env, who, url)
       if (url.pathname === '/kml' && request.method === 'GET') return await handleKml(url)
       if (url.pathname === '/ai' && request.method === 'POST') return await handleAi(request, env, who)
+      if (url.pathname === '/web' && request.method === 'POST') return await handleWeb(request, env, who)
     } catch {
       return error('upstream request failed', 502)
     }

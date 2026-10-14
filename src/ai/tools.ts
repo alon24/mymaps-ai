@@ -5,8 +5,13 @@
  */
 import { CATEGORIES, isCategory, searchNearby, type PlaceResult } from '../geo/places'
 import { geocode } from '../geo/search'
+import type { WebResult } from '../lib/api'
 
-export const MAX_TOOL_STEPS = 3
+/** Tool rounds per question: e.g. web search → locate the places → (one spare) */
+export const MAX_TOOL_STEPS = 4
+
+/** Web searches allowed per question (each costs ~$0.02 on OpenRouter) */
+export const MAX_WEB_SEARCHES = 1
 
 export const TOOLS = [
   {
@@ -29,6 +34,24 @@ export const TOOLS = [
       },
     },
   },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'web_search',
+      description:
+        'Search the web (reviews, "best of" lists) for RECOMMENDED places. Use it only when the user asks for recommendations, ' +
+        'the best, popular or highly rated places; at most once per question. Returns place names with town, why and source. ' +
+        'Then locate each chosen place with search_places (query = the name, near = the town) and reference it by result_id.',
+      parameters: {
+        type: 'object',
+        properties: {
+          query: { type: 'string', description: 'what to look for, in English or Hebrew, e.g. "best brunch cafes"' },
+          near: { type: 'string', description: 'the town or area, e.g. "Rehovot"' },
+        },
+        required: ['query'],
+      },
+    },
+  },
 ]
 
 export interface ToolCall {
@@ -45,6 +68,12 @@ export interface ToolContext {
   /** injectable for tests */
   search?: typeof searchNearby
   geocodeFn?: typeof geocode
+  /** web search (Worker /web); absent = not available */
+  web?: (query: string, near?: string) => Promise<WebResult>
+  /** web searches used for the current question */
+  webUsed?: number
+  /** sources from web searches, shown under the answer */
+  sources?: { url: string; title: string }[]
 }
 
 const LABEL: Record<string, string> = {
@@ -62,6 +91,7 @@ export function describeCall(call: ToolCall): string {
   } catch {
     /* shown generically */
   }
+  if (call.function.name === 'web_search') return `מחפש המלצות ברשת: ${String(a.query ?? '')}${a.near ? ` (${String(a.near)})` : ''}…`
   const what = (typeof a.category === 'string' && LABEL[a.category]) || (typeof a.query === 'string' && a.query) || 'מקומות'
   const near = a.near === 'me' ? 'לידך' : a.near === 'map' || !a.near ? 'באזור המפה' : `ליד ${String(a.near)}`
   return `מחפש ${what} ${near}…`
@@ -69,6 +99,7 @@ export function describeCall(call: ToolCall): string {
 
 /** Run one tool call; returns the JSON string sent back to the model. Never throws. */
 export async function runTool(call: ToolCall, ctx: ToolContext): Promise<string> {
+  if (call.function.name === 'web_search') return runWebSearch(call, ctx)
   if (call.function.name !== 'search_places') return JSON.stringify({ error: `unknown tool ${call.function.name}` })
   let a: Record<string, unknown> = {}
   try {
@@ -109,5 +140,29 @@ export async function runTool(call: ToolCall, ctx: ToolContext): Promise<string>
     })
   } catch (e) {
     return JSON.stringify({ error: e instanceof Error ? e.message : 'search failed', results: [] })
+  }
+}
+
+async function runWebSearch(call: ToolCall, ctx: ToolContext): Promise<string> {
+  if (!ctx.web) return JSON.stringify({ error: 'web search is not available; use search_places' })
+  if ((ctx.webUsed ?? 0) >= MAX_WEB_SEARCHES) return JSON.stringify({ error: 'web search already used for this question; use search_places' })
+  let a: Record<string, unknown> = {}
+  try {
+    a = JSON.parse(call.function.arguments || '{}')
+  } catch {
+    return JSON.stringify({ error: 'arguments must be JSON' })
+  }
+  const query = typeof a.query === 'string' ? a.query.trim() : ''
+  if (!query) return JSON.stringify({ error: 'query is required' })
+  ctx.webUsed = (ctx.webUsed ?? 0) + 1
+  try {
+    const r = await ctx.web(query, typeof a.near === 'string' ? a.near : undefined)
+    if (ctx.sources) for (const s of r.sources) if (!ctx.sources.some((x) => x.url === s.url)) ctx.sources.push(s)
+    return JSON.stringify({
+      places: r.places,
+      ...(r.places.length ? { next: 'locate the ones you choose with search_places (query = name, near = town)' } : { note: 'nothing found; use search_places by category' }),
+    })
+  } catch (e) {
+    return JSON.stringify({ error: e instanceof Error ? e.message : 'web search failed; use search_places' })
   }
 }

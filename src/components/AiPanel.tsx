@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useMapStore } from '../store/mapStore'
 import { useUi } from '../store/uiStore'
-import { askAiStep, type ChatMessage, type ToolCallMessage } from '../lib/api'
+import { askAiStep, webSearch, type ChatMessage, type ToolCallMessage } from '../lib/api'
 import { describeCall, MAX_TOOL_STEPS, runTool, TOOLS } from '../ai/tools'
 import { CATEGORIES, type PlaceResult } from '../geo/places'
 import { loadSettings, workerAccess } from '../lib/settings'
@@ -23,6 +23,8 @@ const lookupResult = (registry: Map<string, PlaceResult>) => (id: string) => {
 
 interface Turn {
   role: 'user' | 'assistant'
+  /** web pages the answer drew on (web_search) */
+  sources?: { url: string; title: string }[]
   text: string
   actions?: AiAction[]
   status?: 'pending' | 'applied' | 'dismissed' | 'applying'
@@ -84,7 +86,16 @@ export function AiPanel() {
       // The model may search real places first (search_places); the app runs each search and sends
       // the results back, up to MAX_TOOL_STEPS rounds, then the model answers with its JSON
       const convo: ToolCallMessage[] = [...messages]
-      const toolCtx = { mapCenter: ui.mapCenter, userLocation: ui.userLocation, registry: registryRef.current }
+      const sources: { url: string; title: string }[] = []
+      const toolCtx = {
+        mapCenter: ui.mapCenter,
+        userLocation: ui.userLocation,
+        registry: registryRef.current,
+        // One web search per question at most (for "recommend / best" asks); the Worker runs it
+        web: (query: string, near?: string) => webSearch(loadSettings(), query, near),
+        webUsed: 0,
+        sources,
+      }
       let raw = ''
       for (let step = 0; ; step++) {
         const r = await askAiStep(loadSettings(), system, convo, TOOLS)
@@ -126,6 +137,7 @@ export function AiPanel() {
           actions: readOnly ? [] : editable,
           status: editable.length && !readOnly ? 'pending' : undefined,
           rejected: res.rejected,
+          ...(sources.length ? { sources } : {}),
           ...(missing ? { missing: true, raw: raws.join('\n\n— ניסיון שני —\n\n'), ask: q } : {}),
         },
       ])
@@ -222,6 +234,20 @@ export function AiPanel() {
               </div>
             )}
             {!!t.rejected && !t.missing && <p className="hint">{t.rejected} פעולות לא תקינות סוננו.</p>}
+            {!!t.sources?.length && (
+              <details className="msg__sources">
+                <summary>מקורות ({t.sources.length})</summary>
+                <ul>
+                  {t.sources.map((src) => (
+                    <li key={src.url}>
+                      <a href={src.url} target="_blank" rel="noopener noreferrer">
+                        {src.title || new URL(src.url).hostname}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            )}
             {t.missing && (
               <div className="proposal proposal--missing">
                 <p className="error">ה-AI לא שלח שינויים שאפשר להחיל, ולכן שום דבר לא נוסף למפה.</p>

@@ -261,6 +261,37 @@ test('first launch shows a short intro once', async ({ page }) => {
   await expect(page.getByRole('dialog', { name: 'ברוך הבא ל-MyMaps AI' })).toBeHidden()
 })
 
+test('AI recommends via web search once, then locates the place on OSM and shows sources', async ({ page }) => {
+  await page.evaluate(() => localStorage.setItem('mymaps-ai.settings', JSON.stringify({ workerUrl: `${location.origin}/__worker`, appToken: 't' })))
+  await page.reload()
+  await page.route('https://overpass-api.de/**', (r) =>
+    r.fulfill({ json: { elements: [{ type: 'node', id: 88, lat: 31.77, lon: 35.21, tags: { name: 'Hummus Place', amenity: 'restaurant' } }] } }),
+  )
+  let webCalls = 0
+  await page.route('**/__worker/web', async (route) => {
+    webCalls++
+    await route.fulfill({ json: { places: [{ name: 'Hummus Place', town: 'Jerusalem', why: 'popular', url: 'https://example.com/h' }], sources: [{ title: 'Best hummus', url: 'https://example.com/best' }] } })
+  })
+  let n = 0
+  await page.route('**/__worker/ai', async (route) => {
+    n++
+    const call = (id: string, name: string, args: string) => ({ role: 'assistant', content: null, tool_calls: [{ id, type: 'function', function: { name, arguments: args } }] })
+    const message =
+      n === 1
+        ? call('w1', 'web_search', '{"query":"best hummus Jerusalem"}')
+        : n === 2
+          ? call('s1', 'search_places', '{"query":"Hummus Place","near":"map"}')
+          : { role: 'assistant', content: JSON.stringify({ reply: 'הנה המלצה', actions: [{ type: 'add_layer', layer_name: 'חומוס', features: [{ result_id: 'osm:node/88' }] }] }) }
+    await route.fulfill({ json: { choices: [{ message }] } })
+  })
+  await page.getByRole('tab', { name: /AI/ }).click()
+  await page.getByLabel('הודעה לעוזר').fill('מה החומוסיות הכי טובות בירושלים?')
+  await page.getByRole('button', { name: 'שלח' }).click()
+  await expect(page.locator('.proposal li')).toHaveText([/שכבה חדשה "חומוס" עם 1 מקומות/])
+  expect(webCalls).toBe(1)
+  await expect(page.locator('.msg__sources a')).toHaveAttribute('href', 'https://example.com/best')
+})
+
 test('AI searches real places (OSM), picks one by id, and it lands where OSM says', async ({ page }) => {
   await page.evaluate(() => localStorage.setItem('mymaps-ai.settings', JSON.stringify({ workerUrl: `${location.origin}/__worker`, appToken: 't' })))
   await page.reload()

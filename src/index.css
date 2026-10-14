@@ -549,3 +549,9 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); ou
 .day__times .seg { margin: 0; flex: 1 1 100%; }
 .day__time { display: inline-flex; align-items: center; gap: 6px; font-size: 0.9rem; color: var(--muted); }
 .day__time input, .day__time select { min-height: 36px; padding: 0 8px; border: 1px solid var(--line); border-radius: 9px; background: var(--panel); color: var(--ink); font: inherit; }
+
+/* AI answer sources (web search) */
+.msg__sources { margin-top: 6px; font-size: 0.82rem; }
+.msg__sources summary { cursor: pointer; color: var(--muted); }
+.msg__sources ul { margin: 4px 0 0; padding-inline-start: 18px; }
+.msg__sources a { color: var(--accent); overflow-wrap: anywhere; }

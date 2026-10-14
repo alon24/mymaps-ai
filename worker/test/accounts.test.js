@@ -163,3 +163,49 @@ describe('daily AI cap', () => {
     expect(dailyLimit({ DAILY_AI_LIMIT: '30' })).toBe(30)
   })
 })
+
+describe('/web: one web search for recommendations', () => {
+  const web = (email, body) => call('/web', email, json(body))
+  function openrouterWeb(capture) {
+    vi.restoreAllMocks()
+    return vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input instanceof Request ? input.url : input)
+      if (url.startsWith('https://oauth2.googleapis.com/tokeninfo')) {
+        const email = decodeURIComponent(url.split('access_token=')[1]).replace(/^tok:/, '')
+        return Response.json({ aud: CLIENT, expires_in: '3500', email, email_verified: 'true' })
+      }
+      capture.push(JSON.parse(init.body))
+      return Response.json({
+        choices: [{ message: { content: '{"places":[{"name":"Café Xoho","town":"Tel Aviv","why":"popular brunch","url":"https://example.com/a"}]}',
+          annotations: [{ type: 'url_citation', url_citation: { url: 'https://example.com/a', title: 'Best brunch' } }] } }],
+        usage: { total_tokens: 900 },
+      })
+    })
+  }
+
+  it('asks OpenRouter with the web plugin (5 results) and returns places + sources; logged and capped like AI calls', async () => {
+    const sent = []
+    openrouterWeb(sent)
+    const e = { ...env, ALLOWED_EMAILS: 'a@example.com', DAILY_AI_LIMIT: '2' }
+    const res = await worker.fetch(web('a@example.com', { query: 'best brunch', near: 'Tel Aviv' }), e)
+    expect(res.status).toBe(200)
+    const out = await res.json()
+    expect(out.places[0]).toMatchObject({ name: 'Café Xoho', town: 'Tel Aviv' })
+    expect(out.sources).toEqual([{ url: 'https://example.com/a', title: 'Best brunch' }])
+    expect(sent[0].plugins).toEqual([{ id: 'web', max_results: 5 }])
+    expect(sent[0].messages.at(-1).content).toContain('best brunch')
+    // web searches share the daily cap with AI calls
+    expect((await worker.fetch(web('a@example.com', { query: 'x' }), e)).status).toBe(200)
+    expect((await worker.fetch(web('a@example.com', { query: 'x' }), e)).status).toBe(429)
+    const { results } = await cf.DB.prepare("SELECT action FROM audit WHERE email = 'a@example.com'").all()
+    expect(results.map((r) => r.action)).toEqual(['web', 'web'])
+  })
+
+  it('validates the query and can be switched off', async () => {
+    openrouterWeb([])
+    const e = { ...env, ALLOWED_EMAILS: 'a@example.com' }
+    expect((await worker.fetch(web('a@example.com', { query: '' }), e)).status).toBe(400)
+    expect((await worker.fetch(web('a@example.com', { query: 'x'.repeat(301) }), e)).status).toBe(400)
+    expect((await worker.fetch(web('a@example.com', { query: 'ok' }), { ...e, WEB_SEARCH: 'off' })).status).toBe(503)
+  })
+})

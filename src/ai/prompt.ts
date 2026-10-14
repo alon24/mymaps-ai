@@ -68,6 +68,7 @@ PLACE is one of:
 
 SEARCHING: you have a tool, search_places, that finds REAL places on OpenStreetMap (with distance, and when known cuisine, opening hours, website).
 Before suggesting ANY place to visit, eat, sleep or buy, call search_places (category + near), then choose from its results and reference them by result_id. Never suggest a place that is not in the results. Prefer results that are notable, have opening hours or a website, and are close. Put useful facts from the results (cuisine, hours) in the description, in Hebrew. If nothing fits, search again with a larger radius or another category, or say so.
+RECOMMENDATIONS: when the user asks for recommended, best, popular or highly rated places, first call web_search ONCE (query in English plus the town in "near"); it returns well-reviewed names from the web. Then locate the ones you pick with search_places (query = the name, near = the town) and use their result_id. Mention briefly why each is recommended. Don't use web_search for anything else.
 
 Example — user: "הצע 3 בתי קפה ליד הים בתל אביב והוסף לשכבה חדשה":
 (you call search_places {"category":"cafe","near":"Tel Aviv Port","radius_km":2}, then answer)
