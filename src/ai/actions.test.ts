@@ -38,12 +38,9 @@ describe('parseAiResponse', () => {
     expect(r.actions.map((a) => a.type)).toEqual(['delete_features'])
     expect(r.rejected).toBe(3)
     expect(parseAiResponse('רק טקסט')).toEqual({ reply: 'רק טקסט', actions: [], rejected: 0 })
+    expect(parseAiResponse('{"reply":"","actions":[{"type":"set_layer","layer_name":"a","color":"D1495B"}]}').actions[0]).toMatchObject({ color: '#d1495b' })
   })
 
-  it('normalizes colors', () => {
-    const r = parseAiResponse('{"reply":"","actions":[{"type":"set_layer","layer_name":"a","color":"D1495B"}]}')
-    expect(r.actions[0]).toMatchObject({ color: '#d1495b' })
-  })
 })
 
 describe('applyActions', () => {
@@ -146,6 +143,11 @@ describe('lenient parsing of real-world model output', () => {
     expect(b.layer_name).toBe('הצעות')
     expect('place' in b.features[0] && b.features[0].place).toBe('Habima Square, Tel Aviv')
   })
+
+  it.each([['actions'], ['action'], ['changes']])('accepts a single action object under "%s" (or a list under changes)', (key) => {
+    const one = { type: 'add_layer', layer_name: 'הצעות', features: [{ place: 'Jaffa Port, Tel Aviv' }] }
+    expect(parseAiResponse(JSON.stringify({ reply: 'x', [key]: key === 'changes' ? [one] : one })).actions).toHaveLength(1)
+  })
 })
 
 describe('needsRepair', () => {
@@ -160,15 +162,6 @@ describe('needsRepair', () => {
     expect(needsRepair('כמה נקודות יש?', { reply: 'יש 3 נקודות', actions: [], rejected: 0 })).toBe(false)
     expect(needsRepair('מה הכי קרוב לים?', { reply: 'החוף הכי קרוב', actions: [], rejected: 0 })).toBe(false)
     expect(needsRepair('הוסף', { reply: 'מוסיף', actions: [{ type: 'highlight', ids: ['a'] }], rejected: 0 })).toBe(false)
-  })
-})
-
-describe('action container shapes', () => {
-  it('accepts a single action object, or "action"/"changes" keys', () => {
-    const one = { type: 'add_layer', layer_name: 'הצעות', features: [{ place: 'Jaffa Port, Tel Aviv' }] }
-    expect(parseAiResponse(JSON.stringify({ reply: 'x', actions: one })).actions).toHaveLength(1)
-    expect(parseAiResponse(JSON.stringify({ reply: 'x', action: one })).actions).toHaveLength(1)
-    expect(parseAiResponse(JSON.stringify({ reply: 'x', changes: [one] })).actions).toHaveLength(1)
   })
 })
 

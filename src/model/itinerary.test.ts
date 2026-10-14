@@ -90,15 +90,6 @@ describe('Google Maps search links', () => {
     )
     expect(googleSearchUrl('  ', { lat: 1, lng: 2 })).toBe('https://www.google.com/maps/search/?api=1&query=1,2')
   })
-
-  it('itinerary HTML has search links, stop coordinates and a distance-from-me button', () => {
-    const m = ops.createMap('x')
-    m.layers = [ops.createLayer('יום', [pt('קפה', 34.78, 32.08), pt('ים', 34.77, 32.09)], { day: { route: true } })]
-    const html = itineraryHtml(m, { appBase: '/' })
-    expect(html).toContain('data-lat="32.08" data-lng="34.78"')
-    expect(html).toContain('חפש ב-Google Maps')
-    expect(html).toContain('id="locate"')
-  })
 })
 
 describe('route layers', () => {

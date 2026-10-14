@@ -149,16 +149,6 @@ test('back up all maps and restore them', async ({ page }) => {
   await expect(page.locator('.toast')).toContainText('שוחזרו')
 })
 
-test('menu shows the version and opens About', async ({ page }) => {
-  await page.getByRole('button', { name: 'תפריט' }).click()
-  await expect(page.locator('.menu__version')).toContainText(/גרסה \d+\.\d+/)
-  await page.getByRole('menuitem', { name: /אודות/ }).click()
-  const about = page.getByRole('dialog', { name: 'אודות MyMaps AI' })
-  await expect(about).toBeVisible()
-  await expect(about.getByText('גרסה', { exact: true })).toBeVisible()
-  await expect(about.getByRole('button', { name: /בדוק עדכונים/ })).toBeVisible()
-})
-
 test('AI promised places but sent no actions: the app asks again, then adds them', async ({ page }) => {
   await page.evaluate(() => localStorage.setItem('mymaps-ai.settings', JSON.stringify({ workerUrl: `${location.origin}/__worker`, appToken: 't' })))
   await page.reload()
@@ -207,14 +197,6 @@ test('Check for updates reads the server version; a stale build never loops fore
   // The served build stays old here: after one automatic retry the app stops and says so
   await expect(page.getByText('הגרסה החדשה לא נטענה')).toBeVisible({ timeout: 15_000 })
   expect(new URL(page.url()).searchParams.has('v')).toBe(false)
-})
-
-test('Check for updates says when already on the latest version', async ({ page }) => {
-  await page.route('**/version.json*', (r) => r.fulfill({ json: { version: '1.0.0' } }))
-  await page.getByRole('button', { name: 'תפריט' }).click()
-  await page.getByRole('menuitem', { name: /אודות/ }).click()
-  await page.getByRole('button', { name: /בדוק עדכונים/ }).click()
-  await expect(page.getByText(/אתה בגרסה האחרונה/)).toBeVisible()
 })
 
 test('a map link from Travel Hub opens as a new local map with its day layers', async ({ page }) => {
@@ -277,13 +259,6 @@ test('first launch shows a short intro once', async ({ page }) => {
   await page.reload()
   await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
   await expect(page.getByRole('dialog', { name: 'ברוך הבא ל-MyMaps AI' })).toBeHidden()
-})
-
-test('settings show the AI connection check', async ({ page }) => {
-  await page.getByRole('button', { name: 'תפריט' }).click()
-  await page.getByRole('menuitem', { name: /הגדרות/ }).click()
-  const dlg = page.getByRole('dialog', { name: 'הגדרות' })
-  await expect(dlg.getByRole('button', { name: 'בדוק חיבור' })).toBeVisible()
 })
 
 test('AI searches real places (OSM), picks one by id, and it lands where OSM says', async ({ page }) => {

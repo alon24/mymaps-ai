@@ -25,22 +25,16 @@ describe('workerAccess', () => {
 })
 
 describe('Worker auth headers', () => {
-  it('sends the Google token when signed in without an app token', async () => {
+  it.each([
+    ['sends the Google token when signed in without an app token', '', 'Authorization', 'Bearer google-token', 'X-App-Token'],
+    ['prefers the admin app token', 'admin', 'X-App-Token', 'admin', 'Authorization'],
+  ])('%s', async (_n, appToken, present, value, absent) => {
     auth.signed = true
     const f = vi.spyOn(globalThis, 'fetch').mockResolvedValue(ok())
-    await askAi({ workerUrl: W, appToken: '' }, 'sys', [{ role: 'user', content: 'hi' }])
+    await askAi({ workerUrl: W, appToken }, 'sys', [{ role: 'user', content: 'hi' }])
     const headers = f.mock.calls[0][1]!.headers as Record<string, string>
-    expect(headers.Authorization).toBe('Bearer google-token')
-    expect(headers['X-App-Token']).toBeUndefined()
-  })
-
-  it('prefers the admin app token', async () => {
-    auth.signed = true
-    const f = vi.spyOn(globalThis, 'fetch').mockResolvedValue(ok())
-    await askAi({ workerUrl: W, appToken: 'admin' }, 'sys', [{ role: 'user', content: 'hi' }])
-    const headers = f.mock.calls[0][1]!.headers as Record<string, string>
-    expect(headers['X-App-Token']).toBe('admin')
-    expect(headers.Authorization).toBeUndefined()
+    expect(headers[present]).toBe(value)
+    expect(headers[absent]).toBeUndefined()
   })
 
   it('explains a 401 for Google users', async () => {

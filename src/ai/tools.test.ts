@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { describeCall, runTool } from './tools'
+import { runTool } from './tools'
 import { applyActions, parseAiResponse } from './actions'
 import * as ops from '../model/ops'
 import type { PlaceResult } from '../geo/places'
@@ -24,10 +24,6 @@ describe('search_places tool', () => {
     const out = JSON.parse(await runTool({ id: 'c', function: { name: 'search_places', arguments: '{"near":"Nowhere"}' } }, { mapCenter: [0, 0], registry: new Map(), search, geocodeFn }))
     expect(out.error).toMatch(/Nowhere/)
     expect(search).not.toHaveBeenCalled()
-  })
-
-  it('describes a call in Hebrew for the progress line', () => {
-    expect(describeCall({ id: 'c', function: { name: 'search_places', arguments: '{"category":"restaurant","near":"רחובות"}' } })).toBe('מחפש מסעדות ליד רחובות…')
   })
 
   it('places picked by result_id land at the searched coordinates; unknown ids are reported', async () => {

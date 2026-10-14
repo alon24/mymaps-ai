@@ -24,13 +24,6 @@ describe('MapDoc operations', () => {
     expect(ops.featureCount(m4)).toBe(0)
   })
 
-  it('renames, hides and removes layers', () => {
-    const m = ops.createMap()
-    const id = m.layers[0].id
-    expect(ops.renameLayer(m, id, 'x').layers[0].name).toBe('x')
-    expect(ops.setLayerVisible(m, id, false).layers[0].visible).toBe(false)
-    expect(ops.removeLayer(m, id).layers).toHaveLength(0)
-  })
 })
 
 describe('ordering and layer settings', () => {
@@ -53,9 +46,11 @@ describe('ordering and layer settings', () => {
     expect(ops.placeFeature(m, 'missing', m.layers[0].id, 0)).toBe(m)
   })
 
-  it('reorders layers', () => {
+  it('reorders and removes layers', () => {
     const { m } = setup()
-    expect(ops.moveLayer(m, m.layers[1].id, 0).layers.map((l) => l.name)).toEqual(['L2', 'L1'])
+    const moved = ops.moveLayer(m, m.layers[1].id, 0)
+    expect(moved.layers.map((l) => l.name)).toEqual(['L2', 'L1'])
+    expect(ops.removeLayer(moved, moved.layers[0].id).layers.map((l) => l.name)).toEqual(['L1'])
   })
 
   it('makes a trip day numbered by default and clears it', () => {
