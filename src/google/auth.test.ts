@@ -5,6 +5,8 @@ vi.mock('../env', () => ({ env: { VITE_GOOGLE_CLIENT_ID: 'cid', VITE_GOOGLE_API_
 afterEach(() => {
   localStorage.clear()
   vi.resetModules()
+  vi.restoreAllMocks()
+  delete window.google
 })
 
 describe('auth token', () => {
@@ -24,6 +26,32 @@ describe('auth token', () => {
     localStorage.setItem('mymaps-ai.google-token', JSON.stringify({ value: 'old', expires: Date.now() - 1000 }))
     auth = await import('./auth')
     expect(auth.isSignedIn()).toBe(false)
+  })
+})
+
+describe('quiet renewal', () => {
+  it('renews an expired token without a click when the person signed in before', async () => {
+    localStorage.setItem('mymaps-ai.google-signed-in', '1')
+    localStorage.setItem('mymaps-ai.google-token', JSON.stringify({ value: 'old', expires: Date.now() - 1000 }))
+    const asked: unknown[] = []
+    window.google = {
+      accounts: {
+        oauth2: {
+          initTokenClient: () => ({
+            callback: () => undefined,
+            requestAccessToken(o) {
+              asked.push(o)
+              queueMicrotask(() => this.callback({ access_token: 'fresh', expires_in: 3600 }))
+            },
+          }),
+          revoke: () => undefined,
+        },
+      },
+    } as unknown as typeof window.google
+    vi.spyOn(document.head, 'appendChild').mockImplementation((n) => (queueMicrotask(() => (n as HTMLScriptElement).onload?.(new Event('load'))), n))
+    const { getToken } = await import('./auth')
+    expect(await getToken()).toBe('fresh')
+    expect(asked[0]).toMatchObject({ prompt: '' })
   })
 })
 
