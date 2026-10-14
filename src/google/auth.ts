@@ -16,7 +16,7 @@ interface TokenResponse {
 interface TokenClient {
   callback: (r: TokenResponse) => void
   error_callback?: (e: { type: string }) => void
-  requestAccessToken: (o?: { prompt?: string }) => void
+  requestAccessToken: (o?: { prompt?: string; hint?: string }) => void
 }
 interface GoogleGlobal {
   accounts: {
@@ -74,6 +74,7 @@ function restoreToken(): Token | null {
 }
 let token: Token | null = restoreToken()
 let expiryTimer: ReturnType<typeof setTimeout> | undefined
+let renewTimer: ReturnType<typeof setTimeout> | undefined
 
 function setToken(t: Token | null) {
   token = t
@@ -86,6 +87,8 @@ function setToken(t: Token | null) {
   }
   // Tell the UI when the session runs out
   if (t) expiryTimer = setTimeout(() => emit(), Math.max(0, t.expires - Date.now()) + 50)
+  clearTimeout(renewTimer)
+  if (t) renewTimer = setTimeout(() => void renewQuietly().catch(() => undefined), Math.max(0, t.expires - Date.now() - 120_000))
   emit()
 }
 
@@ -103,7 +106,6 @@ export function onAuthChange(fn: (signedIn: boolean) => void): () => void {
 }
 const emit = () => listeners.forEach((fn) => fn(isSignedIn()))
 if (token) expiryTimer = setTimeout(emit, Math.max(0, token.expires - Date.now()) + 50)
-
 async function getClient(): Promise<TokenClient> {
   if (!driveEnabled()) throw new Error('Google Drive לא הוגדר באפליקציה (חסר VITE_GOOGLE_CLIENT_ID)')
   await loadScript('https://accounts.google.com/gsi/client')
@@ -115,17 +117,8 @@ async function getClient(): Promise<TokenClient> {
   return client
 }
 
-/**
- * Get a valid access token. `interactive` shows the Google consent popup when needed;
- * it must be called from a user gesture (click) or browsers block the popup.
- */
-export async function getToken(interactive = false): Promise<string> {
-  if (token && token.expires - 60_000 > Date.now()) return token.value
-  // Never open a popup outside a click: browsers block it and the promise would never settle
-  if (!interactive) {
-    if (isSignedIn()) return token!.value
-    throw new Error('נדרשת התחברות מחדש ל-Google')
-  }
+/** Asks Google for a token. `prompt: ''` is the quiet path: no popup (or one that closes itself) if already approved. */
+async function requestToken(prompt: string, hint?: string): Promise<string> {
   const c = await getClient()
   return new Promise((resolve, reject) => {
     c.callback = (r) => {
@@ -144,8 +137,38 @@ export async function getToken(interactive = false): Promise<string> {
       resolve(r.access_token)
     }
     c.error_callback = (e) => reject(new Error(e.type === 'popup_closed' ? 'חלון ההתחברות נסגר' : 'ההתחברות ל-Google נכשלה'))
-    c.requestAccessToken({ prompt: wasSignedIn() ? '' : 'consent' })
+    c.requestAccessToken({ prompt, ...(hint ? { hint } : {}) })
   })
+}
+
+let renewing: Promise<string> | null = null
+/** A new token without asking, for someone who signed in before. Rejects when Google needs a real click. */
+function renewQuietly(): Promise<string> {
+  renewing ??= requestToken('', readSuite(0)?.email).finally(() => {
+    renewing = null
+  })
+  return renewing
+}
+
+/**
+ * Get a valid access token. `interactive` shows the Google consent popup when needed;
+ * it must be called from a user gesture (click) or browsers block the popup.
+ * Without a click, an expired token is renewed quietly if the person signed in before.
+ */
+export async function getToken(interactive = false): Promise<string> {
+  if (token && token.expires - 60_000 > Date.now()) return token.value
+  if (!interactive) {
+    if (wasSignedIn()) {
+      try {
+        return await renewQuietly()
+      } catch {
+        /* needs a click: fall through */
+      }
+    }
+    if (isSignedIn()) return token!.value
+    throw new Error('נדרשת התחברות מחדש ל-Google')
+  }
+  return requestToken(wasSignedIn() ? '' : 'consent')
 }
 
 export async function signOut(): Promise<void> {
@@ -185,4 +208,13 @@ export async function pickFile(fileId?: string): Promise<string | null> {
       .build()
     picker.setVisible(true)
   })
+}
+
+// Opened with an expired token (or phones froze the timer): renew quietly instead of showing "sign in"
+if (typeof document !== 'undefined') {
+  const renewIfNeeded = () => {
+    if (wasSignedIn() && (!token || token.expires - Date.now() < 120_000)) void renewQuietly().catch(() => undefined)
+  }
+  document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && renewIfNeeded())
+  if (!token) renewIfNeeded()
 }
