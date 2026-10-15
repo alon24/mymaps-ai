@@ -104,11 +104,42 @@ export function extractJson(text: string): unknown {
   const start = candidate.indexOf('{')
   const end = candidate.lastIndexOf('}')
   if (start < 0 || end <= start) return null
+  const body = candidate.slice(start, end + 1)
   try {
-    return JSON.parse(candidate.slice(start, end + 1))
+    return JSON.parse(body)
   } catch {
-    return null
+    try {
+      return JSON.parse(fixBrackets(candidate.slice(start)))
+    } catch {
+      return null
+    }
   }
+}
+
+/** Models sometimes mismatch or drop closing brackets: rebuild them from the nesting, cut trailing junk. */
+function fixBrackets(text: string): string {
+  const stack: string[] = []
+  let out = ''
+  let inStr = false
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i]
+    if (inStr) {
+      out += c
+      if (c === '\\') out += text[++i] ?? ''
+      else if (c === '"') inStr = false
+      continue
+    }
+    if (c === '"') inStr = true
+    else if (c === '{' || c === '[') stack.push(c === '{' ? '}' : ']')
+    else if (c === '}' || c === ']') {
+      if (!stack.length) break
+      out += stack.pop()
+      if (!stack.length) return out
+      continue
+    }
+    out += c
+  }
+  return out.replace(/,\s*$/, '') + (inStr ? '"' : '') + stack.reverse().join('')
 }
 
 type Loose = Record<string, unknown>

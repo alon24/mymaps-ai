@@ -19,6 +19,11 @@ describe('parseAiResponse', () => {
   it('extracts JSON from fences and surrounding prose', () => {
     expect(extractJson('hi ```json\n{"reply":"x"}\n``` bye')).toEqual({ reply: 'x' })
     expect(extractJson('text {"a":1} more')).toEqual({ a: 1 })
+    // mismatched closing brackets from the model (regression: nothing was added to the map)
+    expect(extractJson('{"reply":"x","actions":[{"type":"add_layer","features":[{"place":"a"},{"place":"b"}}]}')).toEqual({
+      reply: 'x',
+      actions: [{ type: 'add_layer', features: [{ place: 'a' }, { place: 'b' }] }],
+    })
     expect(extractJson('no json')).toBeNull()
   })
 

@@ -15,7 +15,8 @@ import { Icon } from './ui'
 
 /** search_places results → what applyActions needs: position, name, an icon and a useful default note. */
 const lookupResult = (registry: Map<string, PlaceResult>) => (id: string) => {
-  const r = registry.get(id)
+  // models sometimes mangle the tail of an id (trailing ":" or ":0"): fall back to the id without it
+  const r = registry.get(id) ?? registry.get(id.replace(/:\d*$/, ''))
   if (!r) return undefined
   const note = [r.cuisine && `מטבח: ${r.cuisine}`, r.opening_hours && `שעות: ${r.opening_hours}`, r.website].filter(Boolean).join('\n')
   return { lat: r.lat, lng: r.lng, name: r.name, description: note, icon: r.category ? CATEGORIES[r.category as keyof typeof CATEGORIES]?.icon : undefined }

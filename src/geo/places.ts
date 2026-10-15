@@ -142,8 +142,8 @@ export async function searchNearby(s: NearbySearch, fetchFn: typeof fetch = fetc
   if (!s.query?.trim()) return []
   const d = radiusKm / 111
   const found = await searchPlaces(s.query, { viewbox: [lng - d, lat - d, lng + d, lat + d], limit })
-  return found.map((p, i) => ({
-    id: `nominatim:${p.lat.toFixed(6)},${p.lng.toFixed(6)}:${i}`,
+  return found.map((p) => ({
+    id: `nominatim:${p.lat.toFixed(6)},${p.lng.toFixed(6)}`,
     name: p.name,
     lat: p.lat,
     lng: p.lng,
